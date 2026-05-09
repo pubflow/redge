@@ -1,0 +1,14 @@
+.env
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.log
+*.err
+*.exe
+tmp/
+dist/
+bin/
+coverage.out
+to-do

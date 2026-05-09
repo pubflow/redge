@@ -1,0 +1,125 @@
+# Configuration
+
+Redge loads configuration from `.env` and environment variables. Environment variables override defaults.
+
+## Server
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `REDGE_ADDR` | `0.0.0.0:6379` | Redis/Valkey protocol TCP listener address. |
+| `REDGE_ENV` | `development` | Runtime environment: `development`, `test`, or `production`. |
+| `REDGE_LOG_LEVEL` | `info` | Intended log level: `debug`, `info`, `warn`, or `error`. |
+| `REDGE_LOG_FORMAT` | `json` | Log format: `json` or `console`. Development mode uses console logging. |
+| `REDGE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown timeout. |
+| `REDGE_MAX_REQUEST_BYTES` | `1048576` | Maximum RESP request size. Must be at least `1024`. |
+| `REDGE_READ_TIMEOUT` | `30s` | TCP read timeout. |
+| `REDGE_WRITE_TIMEOUT` | `30s` | TCP write timeout. |
+
+## Redis Authentication
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `REDGE_PASSWORD` | empty | Password accepted by the Redis `AUTH` command. |
+| `REDGE_REQUIRE_AUTH` | `false` | When `true`, startup fails unless `REDGE_PASSWORD` is set. |
+
+If `REDGE_PASSWORD` is set, clients must authenticate before running most commands. `AUTH`, `PING`, and `QUIT` remain available before authentication.
+
+## Database
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DATABASE_URL` | `sqlite://redge.db` | Database connection URL. |
+| `DATABASE_MAX_OPEN_CONNS` | `50` | Maximum open SQL connections for GORM-backed databases. |
+| `DATABASE_MAX_IDLE_CONNS` | `10` | Maximum idle SQL connections. |
+| `DATABASE_CONN_MAX_LIFETIME` | `1h` | Maximum SQL connection lifetime. |
+| `REDGE_MIGRATIONS_AUTO` | `true` | Run schema migrations on startup. |
+
+Supported `DATABASE_URL` formats:
+
+```env
+DATABASE_URL=sqlite://redge.db
+DATABASE_URL=file:local.db
+DATABASE_URL=libsql://example.turso.io
+DATABASE_URL=postgres://user:pass@localhost:5432/redge?sslmode=disable
+DATABASE_URL=postgresql://user:pass@localhost:5432/redge?sslmode=disable
+DATABASE_URL=mysql://user:pass@tcp(localhost:3306)/redge?parseTime=true
+DATABASE_URL=d1://cloudflare_account_id/d1_database_id
+```
+
+### libSQL/Turso
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `TURSO_AUTH_TOKEN` | empty | Optional auth token for libSQL/Turso. |
+
+If the token is included as `authtoken=` in the URL, Redge removes it from the GORM DSN and passes auth separately.
+
+### Cloudflare D1
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `D1_API_TOKEN` | empty | Required when `DATABASE_URL` starts with `d1://`. |
+| `D1_BASE_URL` | empty | Optional Cloudflare API base URL override. |
+| `D1_RETRY_MAX` | `3` | Maximum D1 HTTP retries. |
+| `D1_RETRY_MIN_BACKOFF` | `200ms` | Minimum retry backoff. |
+| `D1_RETRY_MAX_BACKOFF` | `2s` | Maximum retry backoff. |
+
+D1 is accessed through `github.com/pubflow/d1http`, not GORM. This keeps the HTTP API behavior explicit and avoids pretending D1 has local SQL transaction semantics.
+
+## Cache
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `REDGE_CACHE_ENABLED` | `true` | Enables the in-process L1 cache. |
+| `REDGE_CACHE_MAX_KEYS` | `100000` | Target key count used to size TinyLFU counters. |
+| `REDGE_CACHE_MAX_BYTES` | `134217728` | Ristretto max cost, roughly bytes plus per-entry overhead. |
+| `REDGE_CACHE_DEFAULT_TTL` | `5s` | Maximum/default L1 cache TTL. |
+
+The cache is intentionally short lived. Durable state lives in the configured database.
+
+## Expiration Cleanup
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `REDGE_EXPIRY_CLEANUP_ENABLED` | `true` | Enables periodic expired key cleanup. |
+| `REDGE_EXPIRY_CLEANUP_INTERVAL` | `30s` | Cleanup interval. |
+| `REDGE_EXPIRY_CLEANUP_LIMIT` | `1000` | Maximum expired keys removed per cleanup pass. |
+
+Reads also lazily delete expired keys when they are encountered.
+
+## Admin API
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `REDGE_ADMIN_ENABLED` | `true` | Enables the HTTP admin API. |
+| `REDGE_ADMIN_ADDR` | `0.0.0.0:9090` | Admin API listener address. |
+| `REDGE_ADMIN_TOKEN` | empty | Optional bearer token for admin endpoints. Required in production when admin is enabled. |
+| `REDGE_ADMIN_ALLOWED_IPS` | empty | Comma, semicolon, or newline separated IP/CIDR allowlist. |
+| `REDGE_ADMIN_IP_CHECK_ENABLED` | `false` | Enables admin IP allowlist checks. |
+| `REDGE_ADMIN_READONLY` | `false` | Disables write-capable admin endpoints such as cleanup. |
+
+## Example `.env`
+
+```env
+REDGE_ADDR=0.0.0.0:6379
+REDGE_ENV=production
+REDGE_LOG_FORMAT=json
+
+REDGE_REQUIRE_AUTH=true
+REDGE_PASSWORD=change-me
+
+DATABASE_URL=postgres://redge:password@localhost:5432/redge?sslmode=disable
+DATABASE_MAX_OPEN_CONNS=100
+DATABASE_MAX_IDLE_CONNS=20
+REDGE_MIGRATIONS_AUTO=true
+
+REDGE_CACHE_ENABLED=true
+REDGE_CACHE_MAX_KEYS=250000
+REDGE_CACHE_MAX_BYTES=268435456
+REDGE_CACHE_DEFAULT_TTL=5s
+
+REDGE_ADMIN_ENABLED=true
+REDGE_ADMIN_ADDR=127.0.0.1:9090
+REDGE_ADMIN_TOKEN=change-me-too
+REDGE_ADMIN_READONLY=false
+```
