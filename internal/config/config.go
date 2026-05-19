@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -50,6 +51,9 @@ type Config struct {
 func Load() (*Config, error) {
 	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
+	if err := viper.BindEnv("TURSO_AUTH_TOKEN", "TURSO_AUTH_TOKEN", "DATABASE_AUTH_TOKEN", "DB_AUTH_TOKEN", "LIBSQL_AUTH_TOKEN"); err != nil {
+		return nil, fmt.Errorf("bind libsql auth token env aliases: %w", err)
+	}
 	setDefaults()
 
 	if err := viper.ReadInConfig(); err != nil {
@@ -120,23 +124,47 @@ func (c *Config) GetResolvedDatabaseURL() string {
 	if !strings.HasPrefix(dsn, "libsql://") {
 		return dsn
 	}
-	lower := strings.ToLower(dsn)
-	idx := strings.Index(lower, "authtoken=")
-	if idx == -1 {
-		return dsn
-	}
-	start := idx
-	if start > 0 && (dsn[start-1] == '&' || dsn[start-1] == '?') {
-		start--
-	}
-	endRel := strings.Index(dsn[idx:], "&")
-	if endRel == -1 {
-		return strings.TrimRight(dsn[:start], "?&")
-	}
-	return strings.TrimRight(dsn[:start]+dsn[idx+endRel:], "?&")
+
+	safeURL, _ := splitLibSQLDatabaseURL(dsn)
+	return safeURL
 }
 
-func (c *Config) GetTursoAuthToken() string { return strings.TrimSpace(c.TursoAuthToken) }
+func (c *Config) GetTursoAuthToken() string {
+	dsn := strings.TrimSpace(c.DatabaseURL)
+	if strings.HasPrefix(dsn, "libsql://") {
+		_, authToken := splitLibSQLDatabaseURL(dsn)
+		if authToken != "" {
+			return authToken
+		}
+	}
+	return strings.TrimSpace(c.TursoAuthToken)
+}
+
+func splitLibSQLDatabaseURL(dsn string) (string, string) {
+	parsedURL, err := url.Parse(dsn)
+	if err != nil {
+		return dsn, ""
+	}
+
+	query := parsedURL.Query()
+	authToken := firstQueryValue(query, "authToken", "token", "auth_token", "jwt")
+	for _, key := range []string{"authToken", "token", "auth_token", "jwt"} {
+		query.Del(key)
+	}
+	parsedURL.RawQuery = query.Encode()
+
+	return parsedURL.String(), authToken
+}
+
+func firstQueryValue(values url.Values, keys ...string) string {
+	for _, key := range keys {
+		value := strings.TrimSpace(values.Get(key))
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
 
 func (c *Config) DatabaseType() string {
 	dsn := strings.TrimSpace(c.DatabaseURL)

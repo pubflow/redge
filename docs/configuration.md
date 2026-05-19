@@ -50,9 +50,9 @@ DATABASE_URL=d1://cloudflare_account_id/d1_database_id
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `TURSO_AUTH_TOKEN` | empty | Optional auth token for libSQL/Turso. |
+| `TURSO_AUTH_TOKEN` | empty | Optional auth token for libSQL/Turso. Aliases: `DATABASE_AUTH_TOKEN`, `DB_AUTH_TOKEN`, `LIBSQL_AUTH_TOKEN`. |
 
-If the token is included as `authtoken=` in the URL, Redge removes it from the GORM DSN and passes auth separately.
+If the token is included as `authToken=`, `token=`, `auth_token=`, or `jwt=` in the URL, Redge removes it from the GORM DSN and passes auth separately.
 
 ### Cloudflare D1
 
