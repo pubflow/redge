@@ -123,6 +123,7 @@ func (s *Store) Set(ctx context.Context, db int, key string, value []byte, opts 
 			t := now.Add(opts.TTL)
 			expiresAt = &t
 		}
+		wrote = true
 		next := &KeyRow{
 			DB: db, Key: key, Type: typeString, StringValue: value,
 			ExpiresAt: expiresAt, Version: 1, CreatedAt: now, UpdatedAt: now,
@@ -130,9 +131,17 @@ func (s *Store) Set(ctx context.Context, db int, key string, value []byte, opts 
 		if found {
 			next.Version = row.Version + 1
 			next.CreatedAt = row.CreatedAt
+			return tx.Model(&KeyRow{}).
+				Where("db = ? AND key = ?", db, key).
+				Updates(map[string]any{
+					"type":         typeString,
+					"string_value": value,
+					"expires_at":   expiresAt,
+					"version":      next.Version,
+					"updated_at":   now,
+				}).Error
 		}
-		wrote = true
-		return tx.Save(next).Error
+		return tx.Create(next).Error
 	})
 	if err != nil {
 		return nil, false, err
@@ -216,8 +225,15 @@ func (s *Store) IncrBy(ctx context.Context, db int, key string, delta int64) (in
 			next.Version = row.Version + 1
 			next.CreatedAt = row.CreatedAt
 			next.ExpiresAt = row.ExpiresAt
+			return tx.Model(&KeyRow{}).
+				Where("db = ? AND key = ?", db, key).
+				Updates(map[string]any{
+					"string_value": next.StringValue,
+					"version":      next.Version,
+					"updated_at":   now,
+				}).Error
 		}
-		return tx.Save(next).Error
+		return tx.Create(next).Error
 	})
 	return out, err
 }
