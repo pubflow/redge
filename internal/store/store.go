@@ -11,6 +11,12 @@ var (
 	ErrNotInt    = errors.New("ERR value is not an integer or out of range")
 )
 
+const (
+	TypeNone   = "none"
+	TypeString = "string"
+	TypeZSet   = "zset"
+)
+
 type Value struct {
 	Type      string
 	Data      []byte
@@ -29,6 +35,7 @@ type SetOptions struct {
 type Store interface {
 	Migrate(ctx context.Context) error
 	Ping(ctx context.Context) error
+	Type(ctx context.Context, db int, key string) (string, error)
 	Get(ctx context.Context, db int, key string) (*Value, error)
 	Set(ctx context.Context, db int, key string, value []byte, opts SetOptions) (*Value, bool, error)
 	Delete(ctx context.Context, db int, keys ...string) (int64, error)
@@ -45,7 +52,7 @@ type Store interface {
 	ZCount(ctx context.Context, db int, key string, min, max ScoreBound) (int64, error)
 	Scan(ctx context.Context, db int, cursor string, pattern string, count int) (ScanResult, error)
 	CleanupExpired(ctx context.Context, limit int) (int64, error)
-	Stats(ctx context.Context) (Stats, error)
+	Stats(ctx context.Context, db int) (Stats, error)
 	Close() error
 }
 

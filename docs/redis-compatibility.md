@@ -15,8 +15,9 @@ Redge speaks RESP2 and is intended to work with standard Redis and Valkey client
 | `SELECT` | Selects a logical database number. |
 | `CLIENT SETNAME` | Stores the connection-local client name. |
 | `CLIENT GETNAME` | Returns the connection-local client name. |
-| `INFO` | Returns a minimal server section. |
+| `INFO` | Returns minimal `server` and `keyspace` sections. |
 | `COMMAND` | Returns an empty array for broad client compatibility. |
+| `DBSIZE` | Returns live key count for the selected logical database. |
 
 ### Strings, TTLs, and Counters
 
@@ -27,6 +28,9 @@ Redge speaks RESP2 and is intended to work with standard Redis and Valkey client
 | `SETEX` | Equivalent to setting a string with seconds TTL. |
 | `DEL` | Deletes string and sorted-set keys. |
 | `EXISTS` | Counts existing non-expired keys. |
+| `TYPE` | Returns `none`, `string`, or `zset`. |
+| `STRLEN` | Returns string byte length, `0` for missing keys, or `WRONGTYPE` for non-strings. |
+| `MEMORY USAGE` | Returns an approximate byte size for GUI compatibility. |
 | `EXPIRE` | Sets a seconds TTL. |
 | `TTL` | Redis-style seconds TTL response. |
 | `PTTL` | Redis-style milliseconds TTL response. |
@@ -71,6 +75,7 @@ The current implementation has been smoke-tested with:
 - `redis-cli`
 - `ioredis@5`
 - `github.com/redis/go-redis/v9`
+- Another Redis Desktop Manager for basic string key browsing/editing.
 
 ## Important Differences From Redis
 
@@ -79,6 +84,7 @@ Redge is durable-database backed. That is the point, but it means some Redis int
 | Area | Difference |
 | --- | --- |
 | `SCAN` | Uses lexicographic keyset pagination. It is stable and cheap with indexes, but not identical to Redis cursor internals. |
+| `MEMORY USAGE` | Returns an approximation because Redge is database-backed, not Redis memory-backed. |
 | `MULTI/EXEC` | Provides simple queued execution, not full Redis transaction semantics. |
 | D1 backend | D1 HTTP calls are remote and usage-billed by rows read/written. High-write workloads should be measured. |
 | Cache | The L1 cache is process-local and short lived. It is not the durable source of truth. |

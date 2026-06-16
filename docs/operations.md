@@ -215,6 +215,10 @@ The client reached Redge and sent `AUTH`, but the password did not match `REDGE_
 
 The key exists but has a different Redge type. For example, calling `GET` on a sorted set key.
 
+### GUI shows unsupported command errors
+
+Redis desktop clients often inspect keys before opening them. Redge supports the common inspection commands used for basic browsing: `TYPE`, `DBSIZE`, `STRLEN`, `INFO keyspace`, and `MEMORY USAGE`. If a GUI requests hashes, lists, sets, streams, modules, or Redis Cluster commands, those data structures are still outside Redge's current scope.
+
 ### D1 startup fails
 
 Check:

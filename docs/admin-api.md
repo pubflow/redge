@@ -85,7 +85,7 @@ Not-ready response:
 
 ### `GET /admin/v1/info`
 
-Returns service and store statistics.
+Returns service and store statistics for database `0`.
 
 Example:
 

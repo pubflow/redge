@@ -95,9 +95,17 @@ func (r *Router) execute(ctx context.Context, s *Session, args []string) []byte 
 	case "CLIENT":
 		return r.handleClient(s, args)
 	case "INFO":
-		return resp.Bulk([]byte("# Server\r\nredge_version:0.1.0\r\nredis_version:7.2.0\r\n"))
+		return r.info(ctx, s, args)
 	case "COMMAND":
 		return resp.Array()
+	case "DBSIZE":
+		return r.dbsize(ctx, s, args)
+	case "TYPE":
+		return r.keyType(ctx, s, args)
+	case "STRLEN":
+		return r.strlen(ctx, s, args)
+	case "MEMORY":
+		return r.memory(ctx, s, args)
 	case "MULTI":
 		if s.InMulti {
 			return resp.Error("ERR MULTI calls can not be nested")
@@ -164,6 +172,103 @@ func (r *Router) execute(ctx context.Context, s *Session, args []string) []byte 
 		return r.scan(ctx, s, args)
 	default:
 		return resp.Error("ERR unsupported command '" + args[0] + "' in Redge")
+	}
+}
+
+func (r *Router) info(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) > 2 {
+		return resp.Error("ERR wrong number of arguments for 'info' command")
+	}
+	section := "default"
+	if len(args) == 2 {
+		section = strings.ToLower(args[1])
+	}
+	var b strings.Builder
+	if section == "default" || section == "all" || section == "server" {
+		b.WriteString("# Server\r\nredge_version:0.1.0\r\nredis_version:7.2.0\r\n")
+	}
+	if section == "default" || section == "all" || section == "keyspace" {
+		stats, err := r.store.Stats(ctx, s.DB)
+		if err != nil {
+			return mapErr(err)
+		}
+		b.WriteString("# Keyspace\r\n")
+		if stats.Keys > 0 {
+			b.WriteString("db")
+			b.WriteString(strconv.Itoa(s.DB))
+			b.WriteString(":keys=")
+			b.WriteString(strconv.FormatInt(stats.Keys, 10))
+			b.WriteString(",expires=0,avg_ttl=0\r\n")
+		}
+	}
+	return resp.Bulk([]byte(b.String()))
+}
+
+func (r *Router) dbsize(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) != 1 {
+		return resp.Error("ERR wrong number of arguments for 'dbsize' command")
+	}
+	stats, err := r.store.Stats(ctx, s.DB)
+	if err != nil {
+		return mapErr(err)
+	}
+	return resp.Int(stats.Keys)
+}
+
+func (r *Router) keyType(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) != 2 {
+		return resp.Error("ERR wrong number of arguments for 'type' command")
+	}
+	typ, err := r.store.Type(ctx, s.DB, args[1])
+	if err != nil {
+		return mapErr(err)
+	}
+	return resp.Simple(typ)
+}
+
+func (r *Router) strlen(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) != 2 {
+		return resp.Error("ERR wrong number of arguments for 'strlen' command")
+	}
+	v, err := r.store.Get(ctx, s.DB, args[1])
+	if err != nil {
+		return mapErr(err)
+	}
+	if v == nil {
+		return resp.Int(0)
+	}
+	return resp.Int(int64(len(v.Data)))
+}
+
+func (r *Router) memory(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) < 3 || strings.ToUpper(args[1]) != "USAGE" {
+		return resp.Error("ERR unsupported MEMORY subcommand")
+	}
+	key := args[2]
+	typ, err := r.store.Type(ctx, s.DB, key)
+	if err != nil {
+		return mapErr(err)
+	}
+	switch typ {
+	case store.TypeNone:
+		return resp.NullBulk()
+	case store.TypeString:
+		v, err := r.store.Get(ctx, s.DB, key)
+		if err != nil {
+			return mapErr(err)
+		}
+		if v == nil {
+			return resp.NullBulk()
+		}
+		return resp.Int(int64(len(key) + len(v.Data)))
+	case store.TypeZSet:
+		n, err := r.store.ZCard(ctx, s.DB, key)
+		if err != nil {
+			return mapErr(err)
+		}
+		return resp.Int(int64(len(key)) + n*64)
+	default:
+		return resp.NullBulk()
 	}
 }
 

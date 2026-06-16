@@ -16,8 +16,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const typeString = "string"
-const typeZSet = "zset"
+const typeString = store.TypeString
+const typeZSet = store.TypeZSet
 
 type KeyRow struct {
 	DB          int        `gorm:"column:db;primaryKey;autoIncrement:false"`
@@ -71,6 +71,17 @@ func (s *Store) Ping(ctx context.Context) error {
 		return err
 	}
 	return sqlDB.PingContext(ctx)
+}
+
+func (s *Store) Type(ctx context.Context, db int, key string) (string, error) {
+	row, found, err := s.getLiveRow(ctx, db, key)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return store.TypeNone, nil
+	}
+	return row.Type, nil
 }
 
 func (s *Store) Get(ctx context.Context, db int, key string) (*store.Value, error) {
@@ -418,9 +429,9 @@ func (s *Store) CleanupExpired(ctx context.Context, limit int) (int64, error) {
 	return res.RowsAffected, res.Error
 }
 
-func (s *Store) Stats(ctx context.Context) (store.Stats, error) {
+func (s *Store) Stats(ctx context.Context, db int) (store.Stats, error) {
 	var n int64
-	err := s.db.WithContext(ctx).Model(&KeyRow{}).Where("expires_at IS NULL OR expires_at > ?", time.Now()).Count(&n).Error
+	err := s.db.WithContext(ctx).Model(&KeyRow{}).Where("db = ? AND (expires_at IS NULL OR expires_at > ?)", db, time.Now()).Count(&n).Error
 	return store.Stats{Keys: n}, err
 }
 

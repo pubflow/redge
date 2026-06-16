@@ -122,6 +122,8 @@ do {
 } while (cursor !== "0");
 ```
 
+GUI clients such as Another Redis Desktop Manager may call `TYPE`, `STRLEN`, `MEMORY USAGE`, `DBSIZE`, and `INFO keyspace` when browsing keys. Redge implements these for strings and sorted sets so basic key browsing/editing works with the supported data types.
+
 ## go-redis
 
 Install:

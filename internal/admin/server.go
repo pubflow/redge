@@ -81,7 +81,7 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
-	stats, _ := s.opts.Store.Stats(r.Context())
+	stats, _ := s.opts.Store.Stats(r.Context(), 0)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"service":        "redge",
 		"version":        status.Version,

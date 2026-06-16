@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-const typeString = "string"
-const typeZSet = "zset"
+const typeString = store.TypeString
+const typeZSet = store.TypeZSet
 
 type Store struct {
 	client *d1http.Client
@@ -82,6 +82,17 @@ CREATE TABLE IF NOT EXISTS redge_zset_members (
 func (s *Store) Ping(ctx context.Context) error {
 	_, err := s.client.Raw(ctx, "SELECT 1")
 	return err
+}
+
+func (s *Store) Type(ctx context.Context, db int, key string) (string, error) {
+	row, found, err := s.getLiveRow(ctx, db, key)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return store.TypeNone, nil
+	}
+	return row.typ, nil
 }
 
 func (s *Store) Get(ctx context.Context, db int, key string) (*store.Value, error) {
@@ -522,8 +533,8 @@ func (s *Store) CleanupExpired(ctx context.Context, limit int) (int64, error) {
 	return total, nil
 }
 
-func (s *Store) Stats(ctx context.Context) (store.Stats, error) {
-	rows, err := s.client.Raw(ctx, "SELECT COUNT(*) FROM redge_keys WHERE expires_at IS NULL OR expires_at > ?", unixms(time.Now()))
+func (s *Store) Stats(ctx context.Context, db int) (store.Stats, error) {
+	rows, err := s.client.Raw(ctx, "SELECT COUNT(*) FROM redge_keys WHERE db = ? AND (expires_at IS NULL OR expires_at > ?)", db, unixms(time.Now()))
 	if err != nil {
 		return store.Stats{}, err
 	}

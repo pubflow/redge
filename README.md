@@ -7,6 +7,7 @@ This first implementation includes:
 - RESP2 TCP listener.
 - Public HTTP status server for platform health checks.
 - Redis client compatibility for common string, TTL, sorted set, scan, pipeline, and simple transaction flows.
+- GUI-friendly inspection commands such as `TYPE`, `DBSIZE`, `STRLEN`, and `MEMORY USAGE`.
 - Multi-database support through `DATABASE_URL`: SQLite, libSQL/Turso, PostgreSQL, MySQL, and Cloudflare D1.
 - L1 in-memory cache powered by Ristretto/TinyLFU with TTL, max keys, max bytes, and admin metrics.
 - Admin HTTP server with health, cache metrics, cleanup, paginated key inspection, single-key deletion, and sorted-set inspection.
@@ -139,11 +140,11 @@ D1 uses `github.com/pubflow/d1http` directly instead of GORM or `database/sql`, 
 
 Supported connection and server commands:
 
-- `AUTH`, `PING`, `ECHO`, `QUIT`, `SELECT`, `CLIENT SETNAME`, `CLIENT GETNAME`, `INFO`, `COMMAND`.
+- `AUTH`, `PING`, `ECHO`, `QUIT`, `SELECT`, `CLIENT SETNAME`, `CLIENT GETNAME`, `INFO`, `COMMAND`, `DBSIZE`.
 
 Supported string and TTL commands:
 
-- `GET`, `SET`, `SETEX`, `DEL`, `EXISTS`, `EXPIRE`, `TTL`, `PTTL`, `INCR`, `DECR`, `INCRBY`, `DECRBY`.
+- `GET`, `SET`, `SETEX`, `DEL`, `EXISTS`, `TYPE`, `STRLEN`, `MEMORY USAGE`, `EXPIRE`, `TTL`, `PTTL`, `INCR`, `DECR`, `INCRBY`, `DECRBY`.
 
 Supported sorted set commands:
 
