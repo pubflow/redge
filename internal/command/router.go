@@ -58,8 +58,11 @@ func (r *Router) execute(ctx context.Context, s *Session, args []string) []byte 
 	cmd := strings.ToUpper(args[0])
 	switch cmd {
 	case "AUTH":
-		if len(args) < 2 {
+		if len(args) != 2 && len(args) != 3 {
 			return resp.Error("ERR wrong number of arguments for 'auth' command")
+		}
+		if len(args) == 3 && !strings.EqualFold(args[1], "default") {
+			return resp.Error("WRONGPASS Redge only supports the default Redis user.")
 		}
 		pass := args[len(args)-1]
 		if r.password == "" || pass != r.password {

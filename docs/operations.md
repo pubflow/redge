@@ -45,6 +45,23 @@ Do not use `https://...` as the Redis connection URL. Use the public TCP port th
 redis://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
 ```
 
+If you use a fixed Coolify port mapping of `6379:6379`, clients can use:
+
+```text
+redis://:PASSWORD@test1.conn.redgedb.com:6379/0
+```
+
+Prefer object-style client configuration when available because it avoids URL escaping mistakes:
+
+```text
+host=test1.conn.redgedb.com
+port=6379
+password=PASSWORD
+db=0
+```
+
+If the password is embedded in a URL and contains characters such as `@`, `:`, `/`, `#`, `?`, or `%`, URL-encode it first.
+
 Recommended variables:
 
 ```env
@@ -168,13 +185,31 @@ Important things to watch:
 
 ## Troubleshooting
 
+### `ECONNREFUSED host:6379`
+
+The Redis TCP port is not reachable from the client. Check that Coolify has either:
+
+- A fixed port mapping such as `6379:6379`.
+- A public TCP port pointing to container port `6379`.
+
+If `/health` works but Redis gets `ECONNREFUSED`, the HTTP route is fine and only TCP publishing/firewall needs attention.
+
 ### `NOAUTH Authentication required.`
 
-The server has `REDGE_PASSWORD` configured. Authenticate from the client.
+The server has `REDGE_PASSWORD` configured, but the client sent a data command before authenticating. Authenticate from the client.
 
 ```powershell
 redis-cli -a "$env:REDGE_PASSWORD" ping
 ```
+
+### `WRONGPASS invalid username-password pair or user is disabled.`
+
+The client reached Redge and sent `AUTH`, but the password did not match `REDGE_PASSWORD`. Check:
+
+- `REDGE_PASSWORD` in Coolify matches the client password exactly.
+- The application was redeployed after changing environment variables.
+- Passwords embedded in `redis://` URLs are URL-encoded.
+- If your client sends a username, use `default`; Redge supports `AUTH password` and `AUTH default password`.
 
 ### `WRONGTYPE Operation against a key holding the wrong kind of value`
 

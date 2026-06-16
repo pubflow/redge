@@ -4,6 +4,33 @@ Redge speaks RESP2, so clients connect as if they were talking to Redis or Valke
 
 The examples assume Redge is running on `127.0.0.1:6379`.
 
+## Connection URLs
+
+Use Redis TCP URLs for Redis clients. Do not use `https://...` URLs for Redis commands; HTTPS is only for Redge status endpoints such as `/health`, `/ready`, and `/version`.
+
+For a Coolify deployment with a fixed `6379:6379` port mapping:
+
+```text
+redis://:PASSWORD@test1.conn.redgedb.com:6379/0
+```
+
+If Coolify assigns a dynamic public TCP port, replace `6379` with that public port:
+
+```text
+redis://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
+```
+
+When possible, prefer separate client config fields over one URL:
+
+```text
+host=test1.conn.redgedb.com
+port=6379
+password=PASSWORD
+db=0
+```
+
+If the password is embedded in a URL and contains characters such as `@`, `:`, `/`, `#`, `?`, or `%`, URL-encode the password first. For example, `pa:ss@word` becomes `pa%3Ass%40word`.
+
 ## redis-cli
 
 ```powershell
@@ -41,7 +68,7 @@ Basic usage:
 const Redis = require("ioredis");
 
 const redis = new Redis({
-  host: "127.0.0.1",
+  host: process.env.REDGE_HOST || "127.0.0.1",
   port: 6379,
   password: process.env.REDGE_PASSWORD || undefined,
   maxRetriesPerRequest: 2,
@@ -121,7 +148,7 @@ func main() {
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     "127.0.0.1:6379",
-		Password: "",
+		Password: "", // Set this to REDGE_PASSWORD in production.
 		DB:       0,
 	})
 	defer rdb.Close()

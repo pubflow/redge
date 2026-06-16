@@ -24,7 +24,7 @@ Redge loads configuration from `.env` and environment variables. Environment var
 | `REDGE_PASSWORD` | empty | Password accepted by the Redis `AUTH` command. |
 | `REDGE_REQUIRE_AUTH` | `false` | When `true`, startup fails unless `REDGE_PASSWORD` is set. |
 
-If `REDGE_PASSWORD` is set, clients must authenticate before running most commands. `AUTH`, `PING`, and `QUIT` remain available before authentication.
+If `REDGE_PASSWORD` is set, clients must authenticate before running most commands. `AUTH`, `PING`, and `QUIT` remain available before authentication. Redge accepts both `AUTH password` and `AUTH default password`.
 
 ## Database
 

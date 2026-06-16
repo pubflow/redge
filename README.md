@@ -43,6 +43,23 @@ Expose Redis by making container port `6379` public as a TCP/public port in Cool
 redis://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
 ```
 
+If you map host port `6379` directly to container port `6379`, clients can use:
+
+```text
+redis://:PASSWORD@test1.conn.redgedb.com:6379/0
+```
+
+Prefer object-style client config when your library supports it:
+
+```text
+host=test1.conn.redgedb.com
+port=6379
+password=PASSWORD
+db=0
+```
+
+If `PASSWORD` contains URL-significant characters like `@`, `:`, `/`, `#`, `?`, or `%`, URL-encode it before putting it in a `redis://` URL.
+
 Recommended production variables:
 
 ```env

@@ -8,7 +8,7 @@ Redge speaks RESP2 and is intended to work with standard Redis and Valkey client
 
 | Command | Notes |
 | --- | --- |
-| `AUTH` | Password auth when `REDGE_PASSWORD` is set. |
+| `AUTH` | Password auth when `REDGE_PASSWORD` is set. Supports `AUTH password` and `AUTH default password`. |
 | `PING` | Supports optional message. |
 | `ECHO` | Returns the provided bulk string. |
 | `QUIT` | Returns `OK`. |
