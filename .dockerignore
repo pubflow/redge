@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+*.exe
+*.dll
+*.so
+*.dylib
+*.db
+*.log
+bin/
+dist/
+node_modules/
+README.md
+docs/
+to-do/

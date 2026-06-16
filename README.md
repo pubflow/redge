@@ -25,6 +25,50 @@ redis-cli -p 6379 set hello world ex 60
 redis-cli -p 6379 get hello
 ```
 
+## Deploy (Nixpacks)
+
+This repo includes `nixpacks.toml` with Go 1.25 build and a startup command that maps platform `PORT` to `REDGE_ADDR` automatically.
+
+Recommended environment variables:
+
+```env
+REDGE_ENV=production
+DATABASE_URL=sqlite:///data/redge.db
+REDGE_ADMIN_ENABLED=false
+# Optional:
+# REDGE_ADDR=0.0.0.0:6379
+# PORT=6379
+# ADMIN_PORT=9090
+```
+
+Notes:
+
+- If your platform sets `PORT`, Redge will bind to `0.0.0.0:${PORT}`.
+- If you want admin HTTP on a second port, set `REDGE_ADMIN_ENABLED=true` and `ADMIN_PORT`.
+
+## Deploy (Docker)
+
+Build and run:
+
+```powershell
+docker build -t redge:latest .
+docker run --rm -p 6379:6379 -p 9090:9090 -e REDGE_ADMIN_ENABLED=true redge:latest
+```
+
+Production-like example with persistent SQLite data:
+
+```powershell
+docker run -d --name redge \
+	-p 6379:6379 \
+	-v redge_data:/data \
+	-e REDGE_ENV=production \
+	-e DATABASE_URL=sqlite:///data/redge.db \
+	-e REDGE_ADMIN_ENABLED=false \
+	redge:latest
+```
+
+The Docker image also maps platform `PORT` to `REDGE_ADDR` automatically.
+
 ## Database URLs
 
 ```env
