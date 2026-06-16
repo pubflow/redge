@@ -80,6 +80,46 @@ func TestTLSEnabledLoadsWithCertAndKeyPaths(t *testing.T) {
 	}
 }
 
+func TestTLSEnabledLoadsWithCertAndKeyPEM(t *testing.T) {
+	t.Setenv("REDGE_TLS_ENABLED", "true")
+	t.Setenv("REDGE_TLS_CERT_PEM", "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----")
+	t.Setenv("REDGE_TLS_KEY_PEM", "-----BEGIN PRIVATE KEY-----\nexample\n-----END PRIVATE KEY-----")
+	t.Setenv("REDGE_ADDR", "127.0.0.1:6379")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("expected TLS PEM config to load: %v", err)
+	}
+	if source, err := cfg.GetTLSMaterialSource(); err != nil || source != "pem" {
+		t.Fatalf("expected pem source, got %q err=%v", source, err)
+	}
+}
+
+func TestTLSEnabledLoadsWithCertAndKeyBase64(t *testing.T) {
+	t.Setenv("REDGE_TLS_ENABLED", "true")
+	t.Setenv("REDGE_TLS_CERT_B64", "Y2VydA==")
+	t.Setenv("REDGE_TLS_KEY_B64", "a2V5")
+	t.Setenv("REDGE_ADDR", "127.0.0.1:6379")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("expected TLS base64 config to load: %v", err)
+	}
+	if source, err := cfg.GetTLSMaterialSource(); err != nil || source != "base64" {
+		t.Fatalf("expected base64 source, got %q err=%v", source, err)
+	}
+}
+
+func TestTLSEnabledRejectsIncompletePEM(t *testing.T) {
+	t.Setenv("REDGE_TLS_ENABLED", "true")
+	t.Setenv("REDGE_TLS_CERT_PEM", "-----BEGIN CERTIFICATE-----\nexample\n-----END CERTIFICATE-----")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected incomplete TLS PEM config to fail")
+	}
+}
+
 func TestTLSMinVersionRejectsInvalidValue(t *testing.T) {
 	t.Setenv("REDGE_TLS_ENABLED", "true")
 	t.Setenv("REDGE_TLS_CERT_FILE", "/certs/fullchain.pem")

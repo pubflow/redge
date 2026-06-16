@@ -84,7 +84,9 @@ Use a persistent volume mounted at `/data` when using the default SQLite databas
 Security presets:
 
 - Private recommended: route HTTPS to `8080`, do not publish `6379`, and access Redis through a private network, VPN, tunnel, or internal service discovery. Keep `REDGE_REQUIRE_AUTH=true`.
-- Public strong: publish TCP `6379`, enable `REDGE_TLS_ENABLED=true`, mount cert/key files at `/certs`, use a long random `REDGE_PASSWORD`, and set `REDGE_ALLOWED_IPS` when client IPs are known.
+- Public strong: publish TCP `6379`, enable `REDGE_TLS_ENABLED=true`, provide cert/key through base64 env secrets or mounted files, use a long random `REDGE_PASSWORD`, and set `REDGE_ALLOWED_IPS` when client IPs are known.
+
+Coolify's HTTPS domain protects only the HTTP status route. It does not automatically encrypt Redis TCP, so public Redis clients should use `rediss://` with TLS enabled in Redge.
 
 ## Deploy (Nixpacks)
 
@@ -136,6 +138,21 @@ docker run -d --name redge \
 	-e DATABASE_URL=sqlite:///data/redge.db \
 	-e REDGE_ADMIN_ENABLED=false \
 	redge:latest
+```
+
+If you do not want to mount certificate files, set base64 env values instead:
+
+```env
+REDGE_TLS_ENABLED=true
+REDGE_TLS_CERT_B64=<base64-fullchain-pem>
+REDGE_TLS_KEY_B64=<base64-private-key-pem>
+```
+
+Generate those values from certificate files:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("fullchain.pem"))
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("privkey.pem"))
 ```
 
 The Docker image maps platform `PORT` to the HTTP status server automatically. Redis TCP stays on `6379` unless you set `REDGE_ADDR`.

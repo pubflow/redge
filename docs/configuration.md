@@ -28,11 +28,29 @@ Redge loads configuration from `.env` and environment variables. Environment var
 | `REDGE_MAX_CONNECTIONS` | `1000` | Maximum simultaneous Redis TCP connections. `0` disables the limit. |
 | `REDGE_AUTH_FAILURE_DELAY` | `250ms` | Delay before replying to failed Redis `AUTH` attempts. |
 | `REDGE_TLS_ENABLED` | `false` | Enables native TLS on the Redis TCP listener. Clients must use `rediss://` or TLS options. |
-| `REDGE_TLS_CERT_FILE` | empty | TLS certificate chain file for Redis TLS, for example `/certs/fullchain.pem`. Required when TLS is enabled. |
-| `REDGE_TLS_KEY_FILE` | empty | TLS private key file for Redis TLS, for example `/certs/privkey.pem`. Required when TLS is enabled. |
+| `REDGE_TLS_CERT_PEM` | empty | TLS certificate chain PEM for Redis TLS, read directly from env. Highest priority. |
+| `REDGE_TLS_KEY_PEM` | empty | TLS private key PEM for Redis TLS, read directly from env. Must be set with `REDGE_TLS_CERT_PEM`. |
+| `REDGE_TLS_CERT_B64` | empty | Base64 encoded TLS certificate chain PEM. Used when PEM env values are not set. |
+| `REDGE_TLS_KEY_B64` | empty | Base64 encoded TLS private key PEM. Must be set with `REDGE_TLS_CERT_B64`. |
+| `REDGE_TLS_CERT_FILE` | empty | TLS certificate chain file for Redis TLS, for example `/certs/fullchain.pem`. Used when env PEM/base64 values are not set. |
+| `REDGE_TLS_KEY_FILE` | empty | TLS private key file for Redis TLS, for example `/certs/privkey.pem`. Must be set with `REDGE_TLS_CERT_FILE`. |
 | `REDGE_TLS_MIN_VERSION` | `1.2` | Minimum TLS version: `1.2` or `1.3`. |
 
 If `REDGE_PASSWORD` is set, clients must authenticate before running most commands. `AUTH`, `PING`, and `QUIT` remain available before authentication. Redge accepts both `AUTH password` and `AUTH default password`.
+
+TLS material precedence is direct PEM env, then base64 env, then mounted files. If the selected source is incomplete, startup fails. Base64 env values are often easiest in Coolify because they avoid multiline formatting issues.
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("fullchain.pem"))
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("privkey.pem"))
+```
+
+```sh
+base64 -w0 fullchain.pem
+base64 -w0 privkey.pem
+```
+
+Coolify's HTTPS domain certificate is handled by Traefik for HTTP routes and does not automatically encrypt Redis TCP. To use `rediss://`, provide a certificate/key to Redge through one of the variables above.
 
 ## Database
 
@@ -122,8 +140,8 @@ REDGE_PASSWORD=change-me
 REDGE_PROTECTED_MODE=true
 REDGE_MAX_CONNECTIONS=1000
 REDGE_TLS_ENABLED=true
-REDGE_TLS_CERT_FILE=/certs/fullchain.pem
-REDGE_TLS_KEY_FILE=/certs/privkey.pem
+REDGE_TLS_CERT_B64=<base64-fullchain-pem>
+REDGE_TLS_KEY_B64=<base64-private-key-pem>
 
 DATABASE_URL=postgres://redge:password@localhost:5432/redge?sslmode=disable
 DATABASE_MAX_OPEN_CONNS=100

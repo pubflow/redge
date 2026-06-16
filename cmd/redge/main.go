@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -203,7 +206,7 @@ func newRedisTLSConfig(cfg *config.Config) (*tls.Config, error) {
 	if !cfg.TLSEnabled {
 		return nil, nil
 	}
-	cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
+	cert, err := loadRedisTLSCertificate(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -215,4 +218,39 @@ func newRedisTLSConfig(cfg *config.Config) (*tls.Config, error) {
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   minVersion,
 	}, nil
+}
+
+func loadRedisTLSCertificate(cfg *config.Config) (tls.Certificate, error) {
+	source, err := cfg.GetTLSMaterialSource()
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	switch source {
+	case "pem":
+		return tls.X509KeyPair(normalizePEMEnv(cfg.TLSCertPEM), normalizePEMEnv(cfg.TLSKeyPEM))
+	case "base64":
+		certPEM, err := decodeTLSBase64(cfg.TLSCertB64)
+		if err != nil {
+			return tls.Certificate{}, fmt.Errorf("decode REDGE_TLS_CERT_B64: %w", err)
+		}
+		keyPEM, err := decodeTLSBase64(cfg.TLSKeyB64)
+		if err != nil {
+			return tls.Certificate{}, fmt.Errorf("decode REDGE_TLS_KEY_B64: %w", err)
+		}
+		return tls.X509KeyPair(certPEM, keyPEM)
+	case "file":
+		return tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
+	default:
+		return tls.Certificate{}, fmt.Errorf("unsupported TLS material source %q", source)
+	}
+}
+
+func normalizePEMEnv(raw string) []byte {
+	normalized := strings.ReplaceAll(strings.TrimSpace(raw), `\n`, "\n")
+	return []byte(normalized)
+}
+
+func decodeTLSBase64(raw string) ([]byte, error) {
+	compact := strings.NewReplacer("\r", "", "\n", "", "\t", "", " ", "").Replace(strings.TrimSpace(raw))
+	return base64.StdEncoding.DecodeString(compact)
 }

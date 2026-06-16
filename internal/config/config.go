@@ -29,6 +29,10 @@ type Config struct {
 	MaxConnections        int           `mapstructure:"REDGE_MAX_CONNECTIONS" validate:"min=0"`
 	AuthFailureDelay      time.Duration `mapstructure:"REDGE_AUTH_FAILURE_DELAY"`
 	TLSEnabled            bool          `mapstructure:"REDGE_TLS_ENABLED"`
+	TLSCertPEM            string        `mapstructure:"REDGE_TLS_CERT_PEM"`
+	TLSKeyPEM             string        `mapstructure:"REDGE_TLS_KEY_PEM"`
+	TLSCertB64            string        `mapstructure:"REDGE_TLS_CERT_B64"`
+	TLSKeyB64             string        `mapstructure:"REDGE_TLS_KEY_B64"`
 	TLSCertFile           string        `mapstructure:"REDGE_TLS_CERT_FILE"`
 	TLSKeyFile            string        `mapstructure:"REDGE_TLS_KEY_FILE"`
 	TLSMinVersion         string        `mapstructure:"REDGE_TLS_MIN_VERSION" validate:"oneof=1.2 1.3"`
@@ -84,8 +88,10 @@ func Load() (*Config, error) {
 	if cfg.IsProduction() && cfg.ProtectedMode && isPublicBind(cfg.Addr) && cfg.Password == "" {
 		return nil, fmt.Errorf("REDGE_PROTECTED_MODE=true requires REDGE_PASSWORD when REDGE_ADDR listens on a public interface in production")
 	}
-	if cfg.TLSEnabled && (strings.TrimSpace(cfg.TLSCertFile) == "" || strings.TrimSpace(cfg.TLSKeyFile) == "") {
-		return nil, fmt.Errorf("REDGE_TLS_ENABLED=true requires REDGE_TLS_CERT_FILE and REDGE_TLS_KEY_FILE")
+	if cfg.TLSEnabled {
+		if _, err := cfg.GetTLSMaterialSource(); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.IsProduction() && cfg.AdminEnabled && cfg.AdminToken == "" {
 		return nil, fmt.Errorf("REDGE_ADMIN_TOKEN is required in production when admin is enabled")
@@ -113,6 +119,10 @@ func setDefaults() {
 	viper.SetDefault("REDGE_MAX_CONNECTIONS", 1000)
 	viper.SetDefault("REDGE_AUTH_FAILURE_DELAY", "250ms")
 	viper.SetDefault("REDGE_TLS_ENABLED", false)
+	viper.SetDefault("REDGE_TLS_CERT_PEM", "")
+	viper.SetDefault("REDGE_TLS_KEY_PEM", "")
+	viper.SetDefault("REDGE_TLS_CERT_B64", "")
+	viper.SetDefault("REDGE_TLS_KEY_B64", "")
 	viper.SetDefault("REDGE_TLS_CERT_FILE", "")
 	viper.SetDefault("REDGE_TLS_KEY_FILE", "")
 	viper.SetDefault("REDGE_TLS_MIN_VERSION", "1.2")
@@ -246,6 +256,28 @@ func (c *Config) GetAdminAllowedIPs() []string {
 
 func (c *Config) GetAllowedIPs() []string {
 	return splitList(c.AllowedIPs)
+}
+
+func (c *Config) GetTLSMaterialSource() (string, error) {
+	switch {
+	case strings.TrimSpace(c.TLSCertPEM) != "" || strings.TrimSpace(c.TLSKeyPEM) != "":
+		if strings.TrimSpace(c.TLSCertPEM) == "" || strings.TrimSpace(c.TLSKeyPEM) == "" {
+			return "", fmt.Errorf("REDGE_TLS_CERT_PEM and REDGE_TLS_KEY_PEM must be set together")
+		}
+		return "pem", nil
+	case strings.TrimSpace(c.TLSCertB64) != "" || strings.TrimSpace(c.TLSKeyB64) != "":
+		if strings.TrimSpace(c.TLSCertB64) == "" || strings.TrimSpace(c.TLSKeyB64) == "" {
+			return "", fmt.Errorf("REDGE_TLS_CERT_B64 and REDGE_TLS_KEY_B64 must be set together")
+		}
+		return "base64", nil
+	case strings.TrimSpace(c.TLSCertFile) != "" || strings.TrimSpace(c.TLSKeyFile) != "":
+		if strings.TrimSpace(c.TLSCertFile) == "" || strings.TrimSpace(c.TLSKeyFile) == "" {
+			return "", fmt.Errorf("REDGE_TLS_CERT_FILE and REDGE_TLS_KEY_FILE must be set together")
+		}
+		return "file", nil
+	default:
+		return "", fmt.Errorf("REDGE_TLS_ENABLED=true requires TLS certificate and key from REDGE_TLS_CERT_PEM/REDGE_TLS_KEY_PEM, REDGE_TLS_CERT_B64/REDGE_TLS_KEY_B64, or REDGE_TLS_CERT_FILE/REDGE_TLS_KEY_FILE")
+	}
 }
 
 func splitList(raw string) []string {

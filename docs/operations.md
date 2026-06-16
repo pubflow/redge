@@ -98,6 +98,44 @@ REDGE_TLS_MIN_VERSION=1.2
 
 Mount the certificate directory read-only into the container, for example `/certs`. With Redis TLS enabled, plaintext `redis://` clients fail; clients must use TLS, such as `rediss://`.
 
+If mounting files is inconvenient, provide the certificate through environment variables instead. Redge checks TLS material in this order: direct PEM env, base64 env, then file paths.
+
+Direct PEM env works when your platform preserves multiline secrets, or when you store literal `\n` sequences:
+
+```env
+REDGE_TLS_ENABLED=true
+REDGE_TLS_CERT_PEM="-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"
+REDGE_TLS_KEY_PEM="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+```
+
+Base64 env is usually the easiest Coolify option because it avoids multiline formatting issues:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("fullchain.pem"))
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("privkey.pem"))
+```
+
+```sh
+base64 -w0 fullchain.pem
+base64 -w0 privkey.pem
+```
+
+```env
+REDGE_TLS_ENABLED=true
+REDGE_TLS_CERT_B64=<base64-fullchain-pem>
+REDGE_TLS_KEY_B64=<base64-private-key-pem>
+REDGE_TLS_MIN_VERSION=1.2
+```
+
+For public production, use a certificate from a trusted CA such as Let's Encrypt for the Redis hostname. A private CA or self-signed certificate can work, but every Redis client must trust that CA. Use client insecure settings only for local tests.
+
+Coolify's HTTPS certificate belongs to the Traefik HTTP route. It does not automatically appear inside the Redge container and does not encrypt the Redis TCP public port. To make Redis secure over the public internet, enable Redge Redis TLS and connect with:
+
+```text
+rediss://:PASSWORD@test1.conn.redgedb.com:6379/0
+redis-cli --tls -h test1.conn.redgedb.com -p 6379 -a "PASSWORD"
+```
+
 ## Production Checklist
 
 - Set `REDGE_ENV=production`.
@@ -233,7 +271,7 @@ If `REDGE_ALLOWED_IPS` is set, only matching client IPs/CIDRs can connect to the
 Check:
 
 - `REDGE_TLS_ENABLED=true`.
-- `REDGE_TLS_CERT_FILE` and `REDGE_TLS_KEY_FILE` point to mounted files readable by the `redge` container user.
+- TLS material is provided by a complete source: `REDGE_TLS_CERT_PEM`/`REDGE_TLS_KEY_PEM`, `REDGE_TLS_CERT_B64`/`REDGE_TLS_KEY_B64`, or `REDGE_TLS_CERT_FILE`/`REDGE_TLS_KEY_FILE`. Redge uses that precedence order.
 - Clients use `rediss://`, `redis-cli --tls`, or library TLS options.
 - For self-signed certificates, use a trusted CA or client-specific insecure/test settings only during development.
 
