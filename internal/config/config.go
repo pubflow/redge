@@ -28,6 +28,10 @@ type Config struct {
 	AllowedIPs            string        `mapstructure:"REDGE_ALLOWED_IPS"`
 	MaxConnections        int           `mapstructure:"REDGE_MAX_CONNECTIONS" validate:"min=0"`
 	AuthFailureDelay      time.Duration `mapstructure:"REDGE_AUTH_FAILURE_DELAY"`
+	TLSEnabled            bool          `mapstructure:"REDGE_TLS_ENABLED"`
+	TLSCertFile           string        `mapstructure:"REDGE_TLS_CERT_FILE"`
+	TLSKeyFile            string        `mapstructure:"REDGE_TLS_KEY_FILE"`
+	TLSMinVersion         string        `mapstructure:"REDGE_TLS_MIN_VERSION" validate:"oneof=1.2 1.3"`
 	MaxRequestBytes       int64         `mapstructure:"REDGE_MAX_REQUEST_BYTES" validate:"min=1024"`
 	ReadTimeout           time.Duration `mapstructure:"REDGE_READ_TIMEOUT"`
 	WriteTimeout          time.Duration `mapstructure:"REDGE_WRITE_TIMEOUT"`
@@ -80,6 +84,9 @@ func Load() (*Config, error) {
 	if cfg.IsProduction() && cfg.ProtectedMode && isPublicBind(cfg.Addr) && cfg.Password == "" {
 		return nil, fmt.Errorf("REDGE_PROTECTED_MODE=true requires REDGE_PASSWORD when REDGE_ADDR listens on a public interface in production")
 	}
+	if cfg.TLSEnabled && (strings.TrimSpace(cfg.TLSCertFile) == "" || strings.TrimSpace(cfg.TLSKeyFile) == "") {
+		return nil, fmt.Errorf("REDGE_TLS_ENABLED=true requires REDGE_TLS_CERT_FILE and REDGE_TLS_KEY_FILE")
+	}
 	if cfg.IsProduction() && cfg.AdminEnabled && cfg.AdminToken == "" {
 		return nil, fmt.Errorf("REDGE_ADMIN_TOKEN is required in production when admin is enabled")
 	}
@@ -105,6 +112,10 @@ func setDefaults() {
 	viper.SetDefault("REDGE_ALLOWED_IPS", "")
 	viper.SetDefault("REDGE_MAX_CONNECTIONS", 1000)
 	viper.SetDefault("REDGE_AUTH_FAILURE_DELAY", "250ms")
+	viper.SetDefault("REDGE_TLS_ENABLED", false)
+	viper.SetDefault("REDGE_TLS_CERT_FILE", "")
+	viper.SetDefault("REDGE_TLS_KEY_FILE", "")
+	viper.SetDefault("REDGE_TLS_MIN_VERSION", "1.2")
 	viper.SetDefault("REDGE_MAX_REQUEST_BYTES", 1048576)
 	viper.SetDefault("REDGE_READ_TIMEOUT", "30s")
 	viper.SetDefault("REDGE_WRITE_TIMEOUT", "30s")

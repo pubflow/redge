@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"log"
 	"os"
@@ -81,6 +82,11 @@ func main() {
 		Logger:   logger,
 	})
 
+	tlsConfig, err := newRedisTLSConfig(cfg)
+	if err != nil {
+		logger.Fatal("redis tls config failed", zap.Error(err))
+	}
+
 	tcp := server.NewTCP(server.Options{
 		Addr:             cfg.Addr,
 		Password:         cfg.Password,
@@ -90,6 +96,7 @@ func main() {
 		AllowedIPs:       cfg.GetAllowedIPs(),
 		MaxConnections:   cfg.MaxConnections,
 		AuthFailureDelay: cfg.AuthFailureDelay,
+		TLSConfig:        tlsConfig,
 		Router:           router,
 		Logger:           logger,
 	})
@@ -190,4 +197,22 @@ func newLogger(cfg *config.Config) (*zap.Logger, error) {
 		return zap.NewDevelopment()
 	}
 	return zap.NewProduction()
+}
+
+func newRedisTLSConfig(cfg *config.Config) (*tls.Config, error) {
+	if !cfg.TLSEnabled {
+		return nil, nil
+	}
+	cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
+	if err != nil {
+		return nil, err
+	}
+	minVersion := uint16(tls.VersionTLS12)
+	if cfg.TLSMinVersion == "1.3" {
+		minVersion = tls.VersionTLS13
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   minVersion,
+	}, nil
 }

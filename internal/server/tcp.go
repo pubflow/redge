@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
 	"strings"
@@ -25,6 +26,7 @@ type Options struct {
 	AllowedIPs       []string
 	MaxConnections   int
 	AuthFailureDelay time.Duration
+	TLSConfig        *tls.Config
 	Router           *command.Router
 	Logger           *zap.Logger
 }
@@ -47,14 +49,22 @@ func NewTCP(opts Options) *TCP {
 }
 
 func (s *TCP) ListenAndServe() error {
-	ln, err := net.Listen("tcp", s.opts.Addr)
+	var (
+		ln  net.Listener
+		err error
+	)
+	if s.opts.TLSConfig != nil {
+		ln, err = tls.Listen("tcp", s.opts.Addr, s.opts.TLSConfig)
+	} else {
+		ln, err = net.Listen("tcp", s.opts.Addr)
+	}
 	if err != nil {
 		return err
 	}
 	s.mu.Lock()
 	s.ln = ln
 	s.mu.Unlock()
-	s.opts.Logger.Info("redis protocol listener ready", zap.String("addr", s.opts.Addr))
+	s.opts.Logger.Info("redis protocol listener ready", zap.String("addr", s.opts.Addr), zap.Bool("redis_tls", s.opts.TLSConfig != nil))
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -85,13 +95,13 @@ func (s *TCP) ListenAndServe() error {
 
 func (s *TCP) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
-	if s.ln != nil {
-		_ = s.ln.Close()
-	}
 	select {
 	case <-s.done:
 	default:
 		close(s.done)
+	}
+	if s.ln != nil {
+		_ = s.ln.Close()
 	}
 	s.mu.Unlock()
 	select {

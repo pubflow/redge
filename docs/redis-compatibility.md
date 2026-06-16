@@ -2,6 +2,8 @@
 
 Redge speaks RESP2 and is intended to work with standard Redis and Valkey clients for the supported command subset.
 
+Redis TCP can run as plaintext `redis://` or native TLS `rediss://` when `REDGE_TLS_ENABLED=true`. TLS does not change the command set.
+
 ## Supported Commands
 
 ### Connection and Server

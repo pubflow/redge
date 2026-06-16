@@ -27,6 +27,10 @@ Redge loads configuration from `.env` and environment variables. Environment var
 | `REDGE_ALLOWED_IPS` | empty | Comma, semicolon, or newline separated IP/CIDR allowlist for Redis TCP clients. |
 | `REDGE_MAX_CONNECTIONS` | `1000` | Maximum simultaneous Redis TCP connections. `0` disables the limit. |
 | `REDGE_AUTH_FAILURE_DELAY` | `250ms` | Delay before replying to failed Redis `AUTH` attempts. |
+| `REDGE_TLS_ENABLED` | `false` | Enables native TLS on the Redis TCP listener. Clients must use `rediss://` or TLS options. |
+| `REDGE_TLS_CERT_FILE` | empty | TLS certificate chain file for Redis TLS, for example `/certs/fullchain.pem`. Required when TLS is enabled. |
+| `REDGE_TLS_KEY_FILE` | empty | TLS private key file for Redis TLS, for example `/certs/privkey.pem`. Required when TLS is enabled. |
+| `REDGE_TLS_MIN_VERSION` | `1.2` | Minimum TLS version: `1.2` or `1.3`. |
 
 If `REDGE_PASSWORD` is set, clients must authenticate before running most commands. `AUTH`, `PING`, and `QUIT` remain available before authentication. Redge accepts both `AUTH password` and `AUTH default password`.
 
@@ -117,6 +121,9 @@ REDGE_REQUIRE_AUTH=true
 REDGE_PASSWORD=change-me
 REDGE_PROTECTED_MODE=true
 REDGE_MAX_CONNECTIONS=1000
+REDGE_TLS_ENABLED=true
+REDGE_TLS_CERT_FILE=/certs/fullchain.pem
+REDGE_TLS_KEY_FILE=/certs/privkey.pem
 
 DATABASE_URL=postgres://redge:password@localhost:5432/redge?sslmode=disable
 DATABASE_MAX_OPEN_CONNS=100

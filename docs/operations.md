@@ -45,6 +45,12 @@ Do not use `https://...` as the Redis connection URL. Use the public TCP port th
 redis://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
 ```
 
+If Redis TLS is enabled, use `rediss://` instead:
+
+```text
+rediss://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
+```
+
 If you use a fixed Coolify port mapping of `6379:6379`, clients can use:
 
 ```text
@@ -79,7 +85,18 @@ For the default SQLite backend, mount a persistent volume at `/data`. PostgreSQL
 Security presets:
 
 - Private recommended: do not publish `6379`; connect over private network, VPN, tunnel, or internal service discovery. Keep password auth enabled.
-- Public strong: publish TCP `6379`, use a long generated password stored as a Coolify secret, and set `REDGE_ALLOWED_IPS` when client IPs are predictable.
+- Public strong: publish TCP `6379`, enable Redis TLS, use a long generated password stored as a Coolify secret, and set `REDGE_ALLOWED_IPS` when client IPs are predictable.
+
+Native Redis TLS example:
+
+```env
+REDGE_TLS_ENABLED=true
+REDGE_TLS_CERT_FILE=/certs/fullchain.pem
+REDGE_TLS_KEY_FILE=/certs/privkey.pem
+REDGE_TLS_MIN_VERSION=1.2
+```
+
+Mount the certificate directory read-only into the container, for example `/certs`. With Redis TLS enabled, plaintext `redis://` clients fail; clients must use TLS, such as `rediss://`.
 
 ## Production Checklist
 
@@ -210,6 +227,15 @@ Production is binding Redis to a public interface such as `0.0.0.0:6379` without
 ### Redis clients are rejected by allowlist
 
 If `REDGE_ALLOWED_IPS` is set, only matching client IPs/CIDRs can connect to the Redis TCP listener. Remove the variable or add the client public IP/CIDR.
+
+### TLS clients cannot connect
+
+Check:
+
+- `REDGE_TLS_ENABLED=true`.
+- `REDGE_TLS_CERT_FILE` and `REDGE_TLS_KEY_FILE` point to mounted files readable by the `redge` container user.
+- Clients use `rediss://`, `redis-cli --tls`, or library TLS options.
+- For self-signed certificates, use a trusted CA or client-specific insecure/test settings only during development.
 
 ### `NOAUTH Authentication required.`
 

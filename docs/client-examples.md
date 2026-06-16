@@ -20,6 +20,12 @@ If Coolify assigns a dynamic public TCP port, replace `6379` with that public po
 redis://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
 ```
 
+When Redis TLS is enabled, use `rediss://`:
+
+```text
+rediss://:PASSWORD@test1.conn.redgedb.com:6379/0
+```
+
 When possible, prefer separate client config fields over one URL:
 
 ```text
@@ -43,6 +49,12 @@ With auth:
 
 ```powershell
 redis-cli -h 127.0.0.1 -p 6379 -a "$env:REDGE_PASSWORD" ping
+```
+
+With Redis TLS:
+
+```powershell
+redis-cli --tls -h test1.conn.redgedb.com -p 6379 -a "$env:REDGE_PASSWORD" ping
 ```
 
 Sorted set example:
@@ -71,6 +83,7 @@ const redis = new Redis({
   host: process.env.REDGE_HOST || "127.0.0.1",
   port: 6379,
   password: process.env.REDGE_PASSWORD || undefined,
+  tls: process.env.REDGE_TLS === "true" ? {} : undefined,
   maxRetriesPerRequest: 2,
 });
 
@@ -139,7 +152,9 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -152,6 +167,12 @@ func main() {
 		Addr:     "127.0.0.1:6379",
 		Password: "", // Set this to REDGE_PASSWORD in production.
 		DB:       0,
+		TLSConfig: func() *tls.Config {
+			if os.Getenv("REDGE_TLS") == "true" {
+				return &tls.Config{MinVersion: tls.VersionTLS12}
+			}
+			return nil
+		}(),
 	})
 	defer rdb.Close()
 

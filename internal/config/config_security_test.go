@@ -54,3 +54,40 @@ func TestAllowedIPsParsing(t *testing.T) {
 		}
 	}
 }
+
+func TestTLSEnabledRequiresCertAndKey(t *testing.T) {
+	t.Setenv("REDGE_TLS_ENABLED", "true")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected TLS config without cert/key to fail")
+	}
+}
+
+func TestTLSEnabledLoadsWithCertAndKeyPaths(t *testing.T) {
+	t.Setenv("REDGE_TLS_ENABLED", "true")
+	t.Setenv("REDGE_TLS_CERT_FILE", "/certs/fullchain.pem")
+	t.Setenv("REDGE_TLS_KEY_FILE", "/certs/privkey.pem")
+	t.Setenv("REDGE_TLS_MIN_VERSION", "1.3")
+	t.Setenv("REDGE_ADDR", "127.0.0.1:6379")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("expected TLS config to load: %v", err)
+	}
+	if !cfg.TLSEnabled || cfg.TLSMinVersion != "1.3" {
+		t.Fatalf("unexpected TLS config: %#v", cfg)
+	}
+}
+
+func TestTLSMinVersionRejectsInvalidValue(t *testing.T) {
+	t.Setenv("REDGE_TLS_ENABLED", "true")
+	t.Setenv("REDGE_TLS_CERT_FILE", "/certs/fullchain.pem")
+	t.Setenv("REDGE_TLS_KEY_FILE", "/certs/privkey.pem")
+	t.Setenv("REDGE_TLS_MIN_VERSION", "1.1")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected invalid TLS min version to fail")
+	}
+}

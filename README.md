@@ -44,6 +44,12 @@ Expose Redis by making container port `6379` public as a TCP/public port in Cool
 redis://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
 ```
 
+For public encrypted Redis, enable native Redis TLS and use `rediss://`:
+
+```text
+rediss://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
+```
+
 If you map host port `6379` directly to container port `6379`, clients can use:
 
 ```text
@@ -78,7 +84,7 @@ Use a persistent volume mounted at `/data` when using the default SQLite databas
 Security presets:
 
 - Private recommended: route HTTPS to `8080`, do not publish `6379`, and access Redis through a private network, VPN, tunnel, or internal service discovery. Keep `REDGE_REQUIRE_AUTH=true`.
-- Public strong: publish TCP `6379`, use a long random `REDGE_PASSWORD`, and set `REDGE_ALLOWED_IPS` when client IPs are known.
+- Public strong: publish TCP `6379`, enable `REDGE_TLS_ENABLED=true`, mount cert/key files at `/certs`, use a long random `REDGE_PASSWORD`, and set `REDGE_ALLOWED_IPS` when client IPs are known.
 
 ## Deploy (Nixpacks)
 
@@ -119,10 +125,14 @@ docker run -d --name redge \
 	-p 8080:8080 \
 	-p 6379:6379 \
 	-v redge_data:/data \
+	-v /path/to/certs:/certs:ro \
 	-e REDGE_ENV=production \
 	-e REDGE_PROTECTED_MODE=true \
 	-e REDGE_REQUIRE_AUTH=true \
 	-e REDGE_PASSWORD=<strong-random-password> \
+	-e REDGE_TLS_ENABLED=true \
+	-e REDGE_TLS_CERT_FILE=/certs/fullchain.pem \
+	-e REDGE_TLS_KEY_FILE=/certs/privkey.pem \
 	-e DATABASE_URL=sqlite:///data/redge.db \
 	-e REDGE_ADMIN_ENABLED=false \
 	redge:latest
