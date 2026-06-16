@@ -30,9 +30,9 @@ type Server struct {
 func New(opts Options) *Server {
 	s := &Server{opts: opts}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", s.health)
-	mux.HandleFunc("/ready", s.ready)
-	mux.HandleFunc("/version", s.version)
+	mux.Handle("/health", s.secure(http.HandlerFunc(s.health)))
+	mux.Handle("/ready", s.secure(http.HandlerFunc(s.ready)))
+	mux.Handle("/version", s.secure(http.HandlerFunc(s.version)))
 	s.srv = &http.Server{Addr: opts.Addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	return s
 }
@@ -50,6 +50,19 @@ func (s *Server) ListenAndServe() error {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.srv.Shutdown(ctx)
+}
+
+func (s *Server) secure(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {

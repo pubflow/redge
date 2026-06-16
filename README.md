@@ -65,13 +65,20 @@ Recommended production variables:
 
 ```env
 REDGE_ENV=production
+REDGE_PROTECTED_MODE=true
 REDGE_REQUIRE_AUTH=true
-REDGE_PASSWORD=change-me
+REDGE_PASSWORD=<strong-random-password>
 DATABASE_URL=sqlite:///data/redge.db
 REDGE_ADMIN_ENABLED=false
+REDGE_MAX_CONNECTIONS=1000
 ```
 
 Use a persistent volume mounted at `/data` when using the default SQLite database.
+
+Security presets:
+
+- Private recommended: route HTTPS to `8080`, do not publish `6379`, and access Redis through a private network, VPN, tunnel, or internal service discovery. Keep `REDGE_REQUIRE_AUTH=true`.
+- Public strong: publish TCP `6379`, use a long random `REDGE_PASSWORD`, and set `REDGE_ALLOWED_IPS` when client IPs are known.
 
 ## Deploy (Nixpacks)
 
@@ -102,7 +109,7 @@ Build and run:
 
 ```powershell
 docker build -t redge:latest .
-docker run --rm -p 8080:8080 -p 6379:6379 -e REDGE_REQUIRE_AUTH=true -e REDGE_PASSWORD=change-me redge:latest
+docker run --rm -p 8080:8080 -p 6379:6379 -e REDGE_REQUIRE_AUTH=true -e REDGE_PASSWORD=<strong-random-password> redge:latest
 ```
 
 Production-like example with persistent SQLite data:
@@ -113,8 +120,9 @@ docker run -d --name redge \
 	-p 6379:6379 \
 	-v redge_data:/data \
 	-e REDGE_ENV=production \
+	-e REDGE_PROTECTED_MODE=true \
 	-e REDGE_REQUIRE_AUTH=true \
-	-e REDGE_PASSWORD=change-me \
+	-e REDGE_PASSWORD=<strong-random-password> \
 	-e DATABASE_URL=sqlite:///data/redge.db \
 	-e REDGE_ADMIN_ENABLED=false \
 	redge:latest

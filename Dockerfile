@@ -24,6 +24,8 @@ ENV REDGE_ENV=production \
 	DATABASE_URL=sqlite:///data/redge.db \
 	REDGE_ADDR=0.0.0.0:6379 \
 	REDGE_HTTP_ENABLED=true \
+	REDGE_PROTECTED_MODE=true \
+	REDGE_MAX_CONNECTIONS=1000 \
 	REDGE_ADMIN_ENABLED=false
 
 VOLUME ["/data"]

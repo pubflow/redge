@@ -66,18 +66,27 @@ Recommended variables:
 
 ```env
 REDGE_ENV=production
+REDGE_PROTECTED_MODE=true
 REDGE_REQUIRE_AUTH=true
-REDGE_PASSWORD=change-me
+REDGE_PASSWORD=<strong-random-password>
 DATABASE_URL=sqlite:///data/redge.db
 REDGE_ADMIN_ENABLED=false
+REDGE_MAX_CONNECTIONS=1000
 ```
 
 For the default SQLite backend, mount a persistent volume at `/data`. PostgreSQL, MySQL, Turso/libSQL, and D1 are still selected through `DATABASE_URL`.
+
+Security presets:
+
+- Private recommended: do not publish `6379`; connect over private network, VPN, tunnel, or internal service discovery. Keep password auth enabled.
+- Public strong: publish TCP `6379`, use a long generated password stored as a Coolify secret, and set `REDGE_ALLOWED_IPS` when client IPs are predictable.
 
 ## Production Checklist
 
 - Set `REDGE_ENV=production`.
 - Set `REDGE_PASSWORD` and `REDGE_REQUIRE_AUTH=true`.
+- Keep `REDGE_PROTECTED_MODE=true` so production fails closed when Redis is public without a password.
+- Set `REDGE_ALLOWED_IPS` if only known clients should connect.
 - Set `REDGE_ADMIN_TOKEN` if admin is enabled.
 - Bind admin to a private address, for example `127.0.0.1:9090`.
 - Use TLS at the load balancer or private network layer when exposing Redge externally.
@@ -193,6 +202,14 @@ The Redis TCP port is not reachable from the client. Check that Coolify has eith
 - A public TCP port pointing to container port `6379`.
 
 If `/health` works but Redis gets `ECONNREFUSED`, the HTTP route is fine and only TCP publishing/firewall needs attention.
+
+### Startup fails with `REDGE_PROTECTED_MODE=true requires REDGE_PASSWORD`
+
+Production is binding Redis to a public interface such as `0.0.0.0:6379` without a password. Set `REDGE_PASSWORD` and `REDGE_REQUIRE_AUTH=true`, or bind Redis to localhost/private networking.
+
+### Redis clients are rejected by allowlist
+
+If `REDGE_ALLOWED_IPS` is set, only matching client IPs/CIDRs can connect to the Redis TCP listener. Remove the variable or add the client public IP/CIDR.
 
 ### `NOAUTH Authentication required.`
 

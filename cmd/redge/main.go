@@ -82,13 +82,16 @@ func main() {
 	})
 
 	tcp := server.NewTCP(server.Options{
-		Addr:            cfg.Addr,
-		Password:        cfg.Password,
-		MaxRequestBytes: cfg.MaxRequestBytes,
-		ReadTimeout:     cfg.ReadTimeout,
-		WriteTimeout:    cfg.WriteTimeout,
-		Router:          router,
-		Logger:          logger,
+		Addr:             cfg.Addr,
+		Password:         cfg.Password,
+		MaxRequestBytes:  cfg.MaxRequestBytes,
+		ReadTimeout:      cfg.ReadTimeout,
+		WriteTimeout:     cfg.WriteTimeout,
+		AllowedIPs:       cfg.GetAllowedIPs(),
+		MaxConnections:   cfg.MaxConnections,
+		AuthFailureDelay: cfg.AuthFailureDelay,
+		Router:           router,
+		Logger:           logger,
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

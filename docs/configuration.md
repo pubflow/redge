@@ -23,6 +23,10 @@ Redge loads configuration from `.env` and environment variables. Environment var
 | --- | --- | --- |
 | `REDGE_PASSWORD` | empty | Password accepted by the Redis `AUTH` command. |
 | `REDGE_REQUIRE_AUTH` | `false` | When `true`, startup fails unless `REDGE_PASSWORD` is set. |
+| `REDGE_PROTECTED_MODE` | `true` | In production, prevents public Redis binds without `REDGE_PASSWORD`. |
+| `REDGE_ALLOWED_IPS` | empty | Comma, semicolon, or newline separated IP/CIDR allowlist for Redis TCP clients. |
+| `REDGE_MAX_CONNECTIONS` | `1000` | Maximum simultaneous Redis TCP connections. `0` disables the limit. |
+| `REDGE_AUTH_FAILURE_DELAY` | `250ms` | Delay before replying to failed Redis `AUTH` attempts. |
 
 If `REDGE_PASSWORD` is set, clients must authenticate before running most commands. `AUTH`, `PING`, and `QUIT` remain available before authentication. Redge accepts both `AUTH password` and `AUTH default password`.
 
@@ -111,6 +115,8 @@ REDGE_LOG_FORMAT=json
 
 REDGE_REQUIRE_AUTH=true
 REDGE_PASSWORD=change-me
+REDGE_PROTECTED_MODE=true
+REDGE_MAX_CONNECTIONS=1000
 
 DATABASE_URL=postgres://redge:password@localhost:5432/redge?sslmode=disable
 DATABASE_MAX_OPEN_CONNS=100

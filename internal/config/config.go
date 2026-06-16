@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -23,6 +24,10 @@ type Config struct {
 	ShutdownTimeout       time.Duration `mapstructure:"REDGE_SHUTDOWN_TIMEOUT"`
 	Password              string        `mapstructure:"REDGE_PASSWORD"`
 	RequireAuth           bool          `mapstructure:"REDGE_REQUIRE_AUTH"`
+	ProtectedMode         bool          `mapstructure:"REDGE_PROTECTED_MODE"`
+	AllowedIPs            string        `mapstructure:"REDGE_ALLOWED_IPS"`
+	MaxConnections        int           `mapstructure:"REDGE_MAX_CONNECTIONS" validate:"min=0"`
+	AuthFailureDelay      time.Duration `mapstructure:"REDGE_AUTH_FAILURE_DELAY"`
 	MaxRequestBytes       int64         `mapstructure:"REDGE_MAX_REQUEST_BYTES" validate:"min=1024"`
 	ReadTimeout           time.Duration `mapstructure:"REDGE_READ_TIMEOUT"`
 	WriteTimeout          time.Duration `mapstructure:"REDGE_WRITE_TIMEOUT"`
@@ -72,6 +77,9 @@ func Load() (*Config, error) {
 	if cfg.RequireAuth && cfg.Password == "" {
 		return nil, fmt.Errorf("REDGE_REQUIRE_AUTH=true requires REDGE_PASSWORD")
 	}
+	if cfg.IsProduction() && cfg.ProtectedMode && isPublicBind(cfg.Addr) && cfg.Password == "" {
+		return nil, fmt.Errorf("REDGE_PROTECTED_MODE=true requires REDGE_PASSWORD when REDGE_ADDR listens on a public interface in production")
+	}
 	if cfg.IsProduction() && cfg.AdminEnabled && cfg.AdminToken == "" {
 		return nil, fmt.Errorf("REDGE_ADMIN_TOKEN is required in production when admin is enabled")
 	}
@@ -93,6 +101,10 @@ func setDefaults() {
 	viper.SetDefault("REDGE_SHUTDOWN_TIMEOUT", "10s")
 	viper.SetDefault("REDGE_PASSWORD", "")
 	viper.SetDefault("REDGE_REQUIRE_AUTH", false)
+	viper.SetDefault("REDGE_PROTECTED_MODE", true)
+	viper.SetDefault("REDGE_ALLOWED_IPS", "")
+	viper.SetDefault("REDGE_MAX_CONNECTIONS", 1000)
+	viper.SetDefault("REDGE_AUTH_FAILURE_DELAY", "250ms")
 	viper.SetDefault("REDGE_MAX_REQUEST_BYTES", 1048576)
 	viper.SetDefault("REDGE_READ_TIMEOUT", "30s")
 	viper.SetDefault("REDGE_WRITE_TIMEOUT", "30s")
@@ -122,6 +134,22 @@ func setDefaults() {
 
 func (c *Config) IsDevelopment() bool { return c.Environment == "development" }
 func (c *Config) IsProduction() bool  { return c.Environment == "production" }
+
+func isPublicBind(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	host = strings.Trim(host, "[]")
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return host != "localhost"
+	}
+	return !ip.IsLoopback()
+}
 
 func (c *Config) GetResolvedDatabaseURL() string {
 	dsn := strings.TrimSpace(c.DatabaseURL)
@@ -202,7 +230,15 @@ func (c *Config) D1Parts() (accountID, databaseID string, err error) {
 }
 
 func (c *Config) GetAdminAllowedIPs() []string {
-	normalized := strings.NewReplacer("\n", ",", ";", ",").Replace(c.AdminAllowedIPs)
+	return splitList(c.AdminAllowedIPs)
+}
+
+func (c *Config) GetAllowedIPs() []string {
+	return splitList(c.AllowedIPs)
+}
+
+func splitList(raw string) []string {
+	normalized := strings.NewReplacer("\n", ",", ";", ",").Replace(raw)
 	parts := strings.Split(normalized, ",")
 	out := make([]string, 0, len(parts))
 	for _, part := range parts {
