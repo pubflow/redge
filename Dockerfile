@@ -23,11 +23,12 @@ COPY --from=builder /out/redge /usr/local/bin/redge
 ENV REDGE_ENV=production \
 	DATABASE_URL=sqlite:///data/redge.db \
 	REDGE_ADDR=0.0.0.0:6379 \
+	REDGE_HTTP_ENABLED=true \
 	REDGE_ADMIN_ENABLED=false
 
 VOLUME ["/data"]
-EXPOSE 6379 9090
+EXPOSE 6379 8080 9090
 
 USER redge
 
-CMD ["sh", "-c", "export REDGE_ADDR=${REDGE_ADDR:-0.0.0.0:${PORT:-6379}}; if [ -n \"${ADMIN_PORT:-}\" ]; then export REDGE_ADMIN_ADDR=0.0.0.0:${ADMIN_PORT}; fi; exec /usr/local/bin/redge"]
+CMD ["sh", "-c", "export REDGE_HTTP_ADDR=${REDGE_HTTP_ADDR:-0.0.0.0:${PORT:-8080}}; if [ -n \"${ADMIN_PORT:-}\" ]; then export REDGE_ADMIN_ADDR=0.0.0.0:${ADMIN_PORT}; fi; exec /usr/local/bin/redge"]

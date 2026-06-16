@@ -16,6 +16,7 @@ import (
 	"github.com/pubflow/redge/internal/config"
 	"github.com/pubflow/redge/internal/database"
 	"github.com/pubflow/redge/internal/server"
+	"github.com/pubflow/redge/internal/status"
 	"github.com/pubflow/redge/internal/store"
 	"github.com/pubflow/redge/internal/store/d1store"
 	"github.com/pubflow/redge/internal/store/sqlstore"
@@ -102,6 +103,23 @@ func main() {
 		}
 	}()
 
+	var statusServer *status.Server
+	if cfg.HTTPEnabled {
+		statusServer = status.New(status.Options{
+			Addr:         cfg.HTTPAddr,
+			Store:        st,
+			DatabaseType: databaseType,
+			Logger:       logger,
+		})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := statusServer.ListenAndServe(); err != nil && !errors.Is(err, status.ErrClosed) {
+				logger.Fatal("http status server stopped", zap.Error(err))
+			}
+		}()
+	}
+
 	var adminServer *admin.Server
 	if cfg.AdminEnabled {
 		adminServer = admin.New(admin.Options{
@@ -148,12 +166,15 @@ func main() {
 		}()
 	}
 
-	logger.Info("redge started", zap.String("redis_addr", cfg.Addr), zap.String("admin_addr", cfg.AdminAddr), zap.String("database", databaseType))
+	logger.Info("redge started", zap.String("redis_addr", cfg.Addr), zap.String("http_addr", cfg.HTTPAddr), zap.String("admin_addr", cfg.AdminAddr), zap.String("database", databaseType))
 	<-ctx.Done()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	_ = tcp.Shutdown(shutdownCtx)
+	if statusServer != nil {
+		_ = statusServer.Shutdown(shutdownCtx)
+	}
 	if adminServer != nil {
 		_ = adminServer.Shutdown(shutdownCtx)
 	}

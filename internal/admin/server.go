@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pubflow/redge/internal/cache"
+	"github.com/pubflow/redge/internal/status"
 	"github.com/pubflow/redge/internal/store"
 	"go.uber.org/zap"
 )
@@ -83,7 +84,7 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	stats, _ := s.opts.Store.Stats(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"service":        "redge",
-		"version":        "0.1.0",
+		"version":        status.Version,
 		"database":       s.opts.DatabaseType,
 		"keys":           stats.Keys,
 		"admin_readonly": s.opts.ReadOnly,

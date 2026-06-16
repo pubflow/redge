@@ -1,6 +1,6 @@
 # Admin API
 
-The admin API exposes health, readiness, service information, cache metrics, and manual expired-key cleanup.
+The admin API exposes service information, cache metrics, key inspection, and manual expired-key cleanup. Public health checks are also available from the separate status server.
 
 By default it listens on `0.0.0.0:9090`.
 
@@ -29,7 +29,9 @@ If IP checking is enabled, Redge checks the client IP using:
 
 `REDGE_ADMIN_ALLOWED_IPS` supports exact IPs and CIDR ranges.
 
-## Public Endpoints
+## Public Status Endpoints
+
+By default, the separate status server listens on `0.0.0.0:8080`. In Docker and Nixpacks deployments, platform `PORT` is mapped to this server.
 
 ### `GET /health`
 
@@ -53,6 +55,20 @@ Ready response:
 ```json
 {
   "status": "ready"
+}
+```
+
+### `GET /version`
+
+Returns non-sensitive service metadata.
+
+Response:
+
+```json
+{
+  "service": "redge",
+  "version": "0.1.0",
+  "database": "sqlite"
 }
 ```
 

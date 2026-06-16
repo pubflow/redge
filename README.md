@@ -5,6 +5,7 @@ Redge is a Redis/Valkey protocol compatible edge KV server backed by SQL databas
 This first implementation includes:
 
 - RESP2 TCP listener.
+- Public HTTP status server for platform health checks.
 - Redis client compatibility for common string, TTL, sorted set, scan, pipeline, and simple transaction flows.
 - Multi-database support through `DATABASE_URL`: SQLite, libSQL/Turso, PostgreSQL, MySQL, and Cloudflare D1.
 - L1 in-memory cache powered by Ristretto/TinyLFU with TTL, max keys, max bytes, and admin metrics.
@@ -20,14 +21,43 @@ go run ./cmd/redge
 Then test:
 
 ```powershell
+curl.exe http://127.0.0.1:8080/health
+curl.exe http://127.0.0.1:8080/ready
 redis-cli -p 6379 ping
 redis-cli -p 6379 set hello world ex 60
 redis-cli -p 6379 get hello
 ```
 
+## Deploy on Coolify
+
+Redge exposes two different protocols:
+
+- HTTP status on container port `8080`.
+- Redis/Valkey TCP on container port `6379`.
+
+Point your Coolify domain, for example `https://test1.conn.redgedb.com`, to port `8080`. That URL is for `/health`, `/ready`, and `/version`; it is not a Redis URL.
+
+Expose Redis by making container port `6379` public as a TCP/public port in Coolify. Clients connect with the domain plus that public port:
+
+```text
+redis://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
+```
+
+Recommended production variables:
+
+```env
+REDGE_ENV=production
+REDGE_REQUIRE_AUTH=true
+REDGE_PASSWORD=change-me
+DATABASE_URL=sqlite:///data/redge.db
+REDGE_ADMIN_ENABLED=false
+```
+
+Use a persistent volume mounted at `/data` when using the default SQLite database.
+
 ## Deploy (Nixpacks)
 
-This repo includes `nixpacks.toml` with Go 1.25 build and a startup command that maps platform `PORT` to `REDGE_ADDR` automatically.
+This repo includes `nixpacks.toml` with Go 1.25 build and a startup command that maps platform `PORT` to the HTTP status server.
 
 Recommended environment variables:
 
@@ -35,15 +65,17 @@ Recommended environment variables:
 REDGE_ENV=production
 DATABASE_URL=sqlite:///data/redge.db
 REDGE_ADMIN_ENABLED=false
+REDGE_HTTP_ENABLED=true
 # Optional:
 # REDGE_ADDR=0.0.0.0:6379
-# PORT=6379
+# PORT=8080
 # ADMIN_PORT=9090
 ```
 
 Notes:
 
-- If your platform sets `PORT`, Redge will bind to `0.0.0.0:${PORT}`.
+- If your platform sets `PORT`, Redge will bind HTTP status to `0.0.0.0:${PORT}`.
+- Redis TCP remains on `REDGE_ADDR`, defaulting to `0.0.0.0:6379`.
 - If you want admin HTTP on a second port, set `REDGE_ADMIN_ENABLED=true` and `ADMIN_PORT`.
 
 ## Deploy (Docker)
@@ -52,22 +84,25 @@ Build and run:
 
 ```powershell
 docker build -t redge:latest .
-docker run --rm -p 6379:6379 -p 9090:9090 -e REDGE_ADMIN_ENABLED=true redge:latest
+docker run --rm -p 8080:8080 -p 6379:6379 -e REDGE_REQUIRE_AUTH=true -e REDGE_PASSWORD=change-me redge:latest
 ```
 
 Production-like example with persistent SQLite data:
 
 ```powershell
 docker run -d --name redge \
+	-p 8080:8080 \
 	-p 6379:6379 \
 	-v redge_data:/data \
 	-e REDGE_ENV=production \
+	-e REDGE_REQUIRE_AUTH=true \
+	-e REDGE_PASSWORD=change-me \
 	-e DATABASE_URL=sqlite:///data/redge.db \
 	-e REDGE_ADMIN_ENABLED=false \
 	redge:latest
 ```
 
-The Docker image also maps platform `PORT` to `REDGE_ADDR` automatically.
+The Docker image maps platform `PORT` to the HTTP status server automatically. Redis TCP stays on `6379` unless you set `REDGE_ADDR`.
 
 ## Database URLs
 

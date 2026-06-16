@@ -14,6 +14,8 @@ Default local configuration:
 ```env
 DATABASE_URL=sqlite://redge.db
 REDGE_ADDR=0.0.0.0:6379
+REDGE_HTTP_ENABLED=true
+REDGE_HTTP_ADDR=0.0.0.0:8080
 REDGE_ADMIN_ENABLED=true
 REDGE_ADMIN_ADDR=0.0.0.0:9090
 REDGE_MIGRATIONS_AUTO=true
@@ -22,11 +24,38 @@ REDGE_MIGRATIONS_AUTO=true
 Smoke test:
 
 ```powershell
+curl.exe http://127.0.0.1:8080/health
+curl.exe http://127.0.0.1:8080/ready
 redis-cli -p 6379 ping
 redis-cli -p 6379 set hello world ex 60
 redis-cli -p 6379 get hello
 curl.exe http://127.0.0.1:9090/ready
 ```
+
+## Coolify Deployment
+
+Use one container with two exposed protocols:
+
+- Route your HTTPS domain, for example `https://test1.conn.redgedb.com`, to container port `8080`.
+- Expose container port `6379` as a Coolify public TCP port for Redis clients.
+
+Do not use `https://...` as the Redis connection URL. Use the public TCP port that Coolify assigns:
+
+```text
+redis://:PASSWORD@test1.conn.redgedb.com:PUBLIC_PORT/0
+```
+
+Recommended variables:
+
+```env
+REDGE_ENV=production
+REDGE_REQUIRE_AUTH=true
+REDGE_PASSWORD=change-me
+DATABASE_URL=sqlite:///data/redge.db
+REDGE_ADMIN_ENABLED=false
+```
+
+For the default SQLite backend, mount a persistent volume at `/data`. PostgreSQL, MySQL, Turso/libSQL, and D1 are still selected through `DATABASE_URL`.
 
 ## Production Checklist
 

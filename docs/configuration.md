@@ -7,6 +7,8 @@ Redge loads configuration from `.env` and environment variables. Environment var
 | Variable | Default | Description |
 | --- | --- | --- |
 | `REDGE_ADDR` | `0.0.0.0:6379` | Redis/Valkey protocol TCP listener address. |
+| `REDGE_HTTP_ENABLED` | `true` | Enables the public HTTP status server for platform health checks. |
+| `REDGE_HTTP_ADDR` | `0.0.0.0:8080` | Public HTTP status listener address. Docker/Nixpacks map platform `PORT` here. |
 | `REDGE_ENV` | `development` | Runtime environment: `development`, `test`, or `production`. |
 | `REDGE_LOG_LEVEL` | `info` | Intended log level: `debug`, `info`, `warn`, or `error`. |
 | `REDGE_LOG_FORMAT` | `json` | Log format: `json` or `console`. Development mode uses console logging. |
@@ -102,6 +104,8 @@ Reads also lazily delete expired keys when they are encountered.
 
 ```env
 REDGE_ADDR=0.0.0.0:6379
+REDGE_HTTP_ENABLED=true
+REDGE_HTTP_ADDR=0.0.0.0:8080
 REDGE_ENV=production
 REDGE_LOG_FORMAT=json
 

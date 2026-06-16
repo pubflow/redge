@@ -21,9 +21,10 @@ go mod tidy
 go run ./cmd/redge
 ```
 
-By default Redge listens on `0.0.0.0:6379`, uses `sqlite://redge.db`, runs migrations automatically, and exposes the admin API on `0.0.0.0:9090`.
+By default Redge listens for Redis/Valkey TCP on `0.0.0.0:6379`, exposes public status HTTP on `0.0.0.0:8080`, uses `sqlite://redge.db`, runs migrations automatically, and exposes the admin API on `0.0.0.0:9090`.
 
 ```powershell
+curl.exe http://127.0.0.1:8080/health
 redis-cli -p 6379 ping
 redis-cli -p 6379 set hello world ex 60
 redis-cli -p 6379 get hello

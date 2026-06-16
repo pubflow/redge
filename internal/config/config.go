@@ -13,6 +13,8 @@ import (
 
 type Config struct {
 	Addr                  string        `mapstructure:"REDGE_ADDR" validate:"required"`
+	HTTPEnabled           bool          `mapstructure:"REDGE_HTTP_ENABLED"`
+	HTTPAddr              string        `mapstructure:"REDGE_HTTP_ADDR" validate:"required"`
 	AdminEnabled          bool          `mapstructure:"REDGE_ADMIN_ENABLED"`
 	AdminAddr             string        `mapstructure:"REDGE_ADMIN_ADDR" validate:"required"`
 	Environment           string        `mapstructure:"REDGE_ENV" validate:"required,oneof=development test production"`
@@ -81,6 +83,8 @@ func Load() (*Config, error) {
 
 func setDefaults() {
 	viper.SetDefault("REDGE_ADDR", "0.0.0.0:6379")
+	viper.SetDefault("REDGE_HTTP_ENABLED", true)
+	viper.SetDefault("REDGE_HTTP_ADDR", "0.0.0.0:8080")
 	viper.SetDefault("REDGE_ADMIN_ENABLED", true)
 	viper.SetDefault("REDGE_ADMIN_ADDR", "0.0.0.0:9090")
 	viper.SetDefault("REDGE_ENV", "development")

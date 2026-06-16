@@ -12,4 +12,4 @@ cmds = ["go mod download"]
 cmds = ["go build -trimpath -ldflags '-s -w' -o /app/bin/redge ./cmd/redge"]
 
 [start]
-cmd = "sh -c 'export REDGE_ADDR=${REDGE_ADDR:-0.0.0.0:${PORT:-6379}}; if [ -n \"${ADMIN_PORT:-}\" ]; then export REDGE_ADMIN_ADDR=0.0.0.0:${ADMIN_PORT}; fi; exec /app/bin/redge'"
+cmd = "sh -c 'export REDGE_HTTP_ADDR=${REDGE_HTTP_ADDR:-0.0.0.0:${PORT:-8080}}; if [ -n \"${ADMIN_PORT:-}\" ]; then export REDGE_ADMIN_ADDR=0.0.0.0:${ADMIN_PORT}; fi; exec /app/bin/redge'"
