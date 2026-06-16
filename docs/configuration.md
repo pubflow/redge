@@ -72,6 +72,7 @@ DATABASE_URL=postgres://user:pass@localhost:5432/redge?sslmode=disable
 DATABASE_URL=postgresql://user:pass@localhost:5432/redge?sslmode=disable
 DATABASE_URL=mysql://user:pass@tcp(localhost:3306)/redge?parseTime=true
 DATABASE_URL=d1://cloudflare_account_id/d1_database_id
+DATABASE_URL=d1://cloudflare_account_id/d1_database_id?apiToken=cloudflare_token
 ```
 
 ### libSQL/Turso
@@ -93,6 +94,22 @@ If the token is included as `authToken=`, `token=`, `auth_token=`, or `jwt=` in 
 | `D1_RETRY_MAX_BACKOFF` | `2s` | Maximum retry backoff. |
 
 D1 is accessed through `github.com/pubflow/d1http`, not GORM. This keeps the HTTP API behavior explicit and avoids pretending D1 has local SQL transaction semantics.
+
+The recommended D1 production form keeps the token separate:
+
+```env
+DATABASE_URL=d1://cloudflare_account_id/d1_database_id
+D1_API_TOKEN=<cloudflare-token>
+```
+
+For quick deploys, Redge also accepts D1 connection params inside `DATABASE_URL`:
+
+```env
+DATABASE_URL=d1://cloudflare_account_id/d1_database_id?apiToken=<cloudflare-token>
+DATABASE_URL=d1://cloudflare_account_id/d1_database_id?apiToken=<token>&baseUrl=https://api.cloudflare.com/client/v4
+```
+
+Redge extracts and removes sensitive D1 params before resolving the database URL. Token aliases are `apiToken`, `token`, `authToken`, `auth_token`, and `jwt`; base URL aliases are `baseUrl` and `base_url`.
 
 ## Cache
 

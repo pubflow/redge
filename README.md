@@ -167,9 +167,12 @@ DATABASE_URL=postgres://user:pass@localhost:5432/redge?sslmode=disable
 DATABASE_URL=mysql://user:pass@tcp(localhost:3306)/redge?parseTime=true
 DATABASE_URL=d1://cloudflare_account_id/d1_database_id
 D1_API_TOKEN=...
+# Quick D1 connection-string form:
+DATABASE_URL=d1://cloudflare_account_id/d1_database_id?apiToken=cloudflare_token
 ```
 
 D1 uses `github.com/pubflow/d1http` directly instead of GORM or `database/sql`, so Redge can preserve D1 metadata and avoid fake SQL transaction semantics on the hot path.
+For production, prefer keeping D1 tokens in `D1_API_TOKEN`; when a token is embedded in `DATABASE_URL`, Redge extracts it and sanitizes the resolved URL before use.
 
 ## Redis Compatibility
 

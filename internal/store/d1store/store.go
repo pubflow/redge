@@ -30,14 +30,15 @@ func New(cfg *config.Config, log *zap.Logger) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cfg.D1APIToken == "" {
+	apiToken := cfg.GetD1APIToken()
+	if apiToken == "" {
 		return nil, fmt.Errorf("D1_API_TOKEN is required for d1 backend")
 	}
 	client := d1http.New(d1http.Config{
 		AccountID:  accountID,
 		DatabaseID: databaseID,
-		APIToken:   cfg.D1APIToken,
-		BaseURL:    cfg.D1BaseURL,
+		APIToken:   apiToken,
+		BaseURL:    cfg.GetD1BaseURL(),
 		Retry: d1http.RetryConfig{
 			MaxRetries: cfg.D1RetryMax,
 			MinBackoff: cfg.D1RetryMinBackoff,

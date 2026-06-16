@@ -204,6 +204,14 @@ DATABASE_URL=d1://cloudflare_account_id/d1_database_id
 D1_API_TOKEN=...
 ```
 
+The token can also be embedded for quick connection-string based deploys:
+
+```env
+DATABASE_URL=d1://cloudflare_account_id/d1_database_id?apiToken=...
+```
+
+Redge extracts `apiToken`, `token`, `authToken`, `auth_token`, or `jwt` from the URL before resolving the database identity. It also accepts `baseUrl` or `base_url` as an inline `D1_BASE_URL` override. Prefer separate secrets for production when your platform supports them.
+
 D1 is usage-billed by rows read and rows written. Workloads with many tiny writes, such as rate limiting, can still be affordable but should be measured carefully.
 
 ## Pipelining and D1
@@ -306,7 +314,7 @@ Check:
 
 - `DATABASE_URL` starts with `d1://`.
 - It has exactly `d1://account_id/database_id`.
-- `D1_API_TOKEN` is set.
+- `D1_API_TOKEN` is set, or the URL includes `apiToken`, `token`, `authToken`, `auth_token`, or `jwt`.
 - The token has access to the D1 database.
 
 ### Admin returns `401`

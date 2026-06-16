@@ -174,12 +174,16 @@ func isPublicBind(addr string) bool {
 
 func (c *Config) GetResolvedDatabaseURL() string {
 	dsn := strings.TrimSpace(c.DatabaseURL)
-	if !strings.HasPrefix(dsn, "libsql://") {
+	switch {
+	case strings.HasPrefix(dsn, "libsql://"):
+		safeURL, _ := splitLibSQLDatabaseURL(dsn)
+		return safeURL
+	case strings.HasPrefix(dsn, "d1://"):
+		safeURL, _, _ := splitD1DatabaseURL(dsn)
+		return safeURL
+	default:
 		return dsn
 	}
-
-	safeURL, _ := splitLibSQLDatabaseURL(dsn)
-	return safeURL
 }
 
 func (c *Config) GetTursoAuthToken() string {
@@ -200,13 +204,57 @@ func splitLibSQLDatabaseURL(dsn string) (string, string) {
 	}
 
 	query := parsedURL.Query()
-	authToken := firstQueryValue(query, "authToken", "token", "auth_token", "jwt")
-	for _, key := range []string{"authToken", "token", "auth_token", "jwt"} {
+	authToken := firstQueryValue(query, libSQLTokenQueryKeys...)
+	for _, key := range libSQLTokenQueryKeys {
 		query.Del(key)
 	}
 	parsedURL.RawQuery = query.Encode()
 
 	return parsedURL.String(), authToken
+}
+
+var libSQLTokenQueryKeys = []string{"authToken", "token", "auth_token", "jwt"}
+var d1TokenQueryKeys = []string{"apiToken", "token", "authToken", "auth_token", "jwt"}
+
+func (c *Config) GetD1APIToken() string {
+	dsn := strings.TrimSpace(c.DatabaseURL)
+	if strings.HasPrefix(dsn, "d1://") {
+		_, apiToken, _ := splitD1DatabaseURL(dsn)
+		if apiToken != "" {
+			return apiToken
+		}
+	}
+	return strings.TrimSpace(c.D1APIToken)
+}
+
+func (c *Config) GetD1BaseURL() string {
+	dsn := strings.TrimSpace(c.DatabaseURL)
+	if strings.HasPrefix(dsn, "d1://") {
+		_, _, baseURL := splitD1DatabaseURL(dsn)
+		if baseURL != "" {
+			return baseURL
+		}
+	}
+	return strings.TrimSpace(c.D1BaseURL)
+}
+
+func splitD1DatabaseURL(dsn string) (string, string, string) {
+	parsedURL, err := url.Parse(dsn)
+	if err != nil {
+		return dsn, "", ""
+	}
+
+	query := parsedURL.Query()
+	apiToken := firstQueryValue(query, d1TokenQueryKeys...)
+	baseURL := firstQueryValue(query, "baseUrl", "base_url")
+	for _, key := range d1TokenQueryKeys {
+		query.Del(key)
+	}
+	query.Del("baseUrl")
+	query.Del("base_url")
+	parsedURL.RawQuery = query.Encode()
+
+	return parsedURL.String(), apiToken, baseURL
 }
 
 func firstQueryValue(values url.Values, keys ...string) string {
@@ -238,7 +286,7 @@ func (c *Config) DatabaseType() string {
 }
 
 func (c *Config) D1Parts() (accountID, databaseID string, err error) {
-	dsn := strings.TrimSpace(c.DatabaseURL)
+	dsn := strings.TrimSpace(c.GetResolvedDatabaseURL())
 	if !strings.HasPrefix(dsn, "d1://") {
 		return "", "", fmt.Errorf("not a d1 database url")
 	}
