@@ -60,6 +60,9 @@ Redis TCP can run as plaintext `redis://` or native TLS `rediss://` when `REDGE_
 | `ZREVRANGEBYSCORE` | Descending score range variant with optional `WITHSCORES` and `LIMIT`. |
 | `ZSCORE` | Returns the member score or null. |
 | `ZCOUNT` | Supports finite scores, infinities, and exclusive bounds. |
+| `ZINCRBY` | Increments a member score by a float delta; creates the member when missing. |
+| `ZPOPMIN` | Pops one or more lowest-score members (`count` optional, default 1). |
+| `ZPOPMAX` | Pops one or more highest-score members (`count` optional, default 1). |
 
 ### Iteration
 

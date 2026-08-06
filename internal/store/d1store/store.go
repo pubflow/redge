@@ -694,6 +694,96 @@ func (s *Store) ZCount(ctx context.Context, db int, key string, min, max store.S
 	return firstInt(rows), nil
 }
 
+func (s *Store) ZIncrBy(ctx context.Context, db int, key string, member []byte, delta float64) (float64, error) {
+	row, found, err := s.getLiveRow(ctx, db, key)
+	if err != nil {
+		return 0, err
+	}
+	if found && row.typ != typeZSet {
+		return 0, store.ErrWrongType
+	}
+	hash := memberHash(member)
+	encoded := base64.StdEncoding.EncodeToString(member)
+	now := unixms(time.Now())
+	current := 0.0
+	scoreRows, err := s.client.Raw(ctx, "SELECT score FROM redge_zset_members WHERE db = ? AND key = ? AND member_hash = ? LIMIT 1", db, key, hash)
+	if err != nil {
+		return 0, err
+	}
+	if len(scoreRows) > 0 && len(scoreRows[0].Results.Rows) > 0 && len(scoreRows[0].Results.Rows[0]) > 0 {
+		current = anyFloat64(scoreRows[0].Results.Rows[0][0])
+	}
+	out := current + delta
+	if !found {
+		_, err = s.client.Exec(ctx, "INSERT INTO redge_keys (db, key, type, string_value, expires_at, version, created_at, updated_at) VALUES (?, ?, ?, NULL, NULL, 1, ?, ?)", db, key, typeZSet, now, now)
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		_, err = s.client.Exec(ctx, "UPDATE redge_keys SET version = ?, updated_at = ? WHERE db = ? AND key = ?", row.version+1, now, db, key)
+		if err != nil {
+			return 0, err
+		}
+	}
+	_, err = s.client.Exec(ctx, zsetUpsertSQL(), db, key, hash, encoded, out, now, now)
+	return out, err
+}
+
+func (s *Store) ZPopMin(ctx context.Context, db int, key string, count int64) ([]store.ZMember, error) {
+	return s.zpop(ctx, db, key, count, false)
+}
+
+func (s *Store) ZPopMax(ctx context.Context, db int, key string, count int64) ([]store.ZMember, error) {
+	return s.zpop(ctx, db, key, count, true)
+}
+
+func (s *Store) zpop(ctx context.Context, db int, key string, count int64, max bool) ([]store.ZMember, error) {
+	if count <= 0 {
+		count = 1
+	}
+	row, found, err := s.getLiveRow(ctx, db, key)
+	if err != nil || !found {
+		return nil, err
+	}
+	if row.typ != typeZSet {
+		return nil, store.ErrWrongType
+	}
+	order := "score ASC, member ASC"
+	if max {
+		order = "score DESC, member DESC"
+	}
+	rows, err := s.client.Raw(ctx, "SELECT member, score, member_hash FROM redge_zset_members WHERE db = ? AND key = ? ORDER BY "+order+" LIMIT ?", db, key, count)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 || len(rows[0].Results.Rows) == 0 {
+		return nil, nil
+	}
+	out := make([]store.ZMember, 0, len(rows[0].Results.Rows))
+	hashes := make([]string, 0, len(rows[0].Results.Rows))
+	for _, cols := range rows[0].Results.Rows {
+		if len(cols) < 3 {
+			continue
+		}
+		member, err := base64.StdEncoding.DecodeString(d1http.String(cols[0]))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, store.ZMember{Member: member, Score: anyFloat64(cols[1])})
+		hashes = append(hashes, d1http.String(cols[2]))
+	}
+	for _, hash := range hashes {
+		if _, err := s.client.Exec(ctx, "DELETE FROM redge_zset_members WHERE db = ? AND key = ? AND member_hash = ?", db, key, hash); err != nil {
+			return nil, err
+		}
+	}
+	now := unixms(time.Now())
+	if _, err := s.client.Exec(ctx, "UPDATE redge_keys SET version = ?, updated_at = ? WHERE db = ? AND key = ?", row.version+1, now, db, key); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (s *Store) Scan(ctx context.Context, db int, cursor string, pattern string, count int) (store.ScanResult, error) {
 	if count <= 0 {
 		count = 10

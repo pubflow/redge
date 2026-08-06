@@ -126,6 +126,15 @@ func (statusTestStore) ZScore(ctx context.Context, db int, key string, member []
 func (statusTestStore) ZCount(ctx context.Context, db int, key string, min, max store.ScoreBound) (int64, error) {
 	return 0, nil
 }
+func (statusTestStore) ZIncrBy(ctx context.Context, db int, key string, member []byte, delta float64) (float64, error) {
+	return 0, nil
+}
+func (statusTestStore) ZPopMin(ctx context.Context, db int, key string, count int64) ([]store.ZMember, error) {
+	return nil, nil
+}
+func (statusTestStore) ZPopMax(ctx context.Context, db int, key string, count int64) ([]store.ZMember, error) {
+	return nil, nil
+}
 func (statusTestStore) Scan(ctx context.Context, db int, cursor string, pattern string, count int) (store.ScanResult, error) {
 	return store.ScanResult{}, nil
 }

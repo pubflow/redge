@@ -104,6 +104,16 @@ func TestRESPPersistAndZRangeByScore(t *testing.T) {
 	mustReply(t, router, session, []string{"ZREVRANGEBYSCORE", "z", "3", "1", "LIMIT", "0", "1"}, "*1\r\n$5\r\nthree\r\n")
 }
 
+func TestRESPZIncrByAndZPop(t *testing.T) {
+	router, session := newGUITestRouter()
+
+	mustReply(t, router, session, []string{"ZADD", "scores", "1", "a", "2", "b", "3", "c"}, ":3\r\n")
+	mustReply(t, router, session, []string{"ZINCRBY", "scores", "4", "a"}, "$1\r\n5\r\n")
+	mustReply(t, router, session, []string{"ZPOPMIN", "scores", "1"}, "*2\r\n$1\r\nb\r\n$1\r\n2\r\n")
+	mustReply(t, router, session, []string{"ZPOPMAX", "scores", "1"}, "*2\r\n$1\r\na\r\n$1\r\n5\r\n")
+	mustReply(t, router, session, []string{"ZCARD", "scores"}, ":1\r\n")
+}
+
 func newGUITestRouter() (*Router, *Session) {
 	return NewRouter(RouterOptions{
 		Store: &fakeStore{
@@ -390,6 +400,49 @@ func (s *fakeStore) ZScore(ctx context.Context, db int, key string, member []byt
 
 func (s *fakeStore) ZCount(ctx context.Context, db int, key string, min, max store.ScoreBound) (int64, error) {
 	return s.ZCard(ctx, db, key)
+}
+
+func (s *fakeStore) ZIncrBy(ctx context.Context, db int, key string, member []byte, delta float64) (float64, error) {
+	k := fakeKey(db, key)
+	if _, ok := s.strings[k]; ok {
+		return 0, store.ErrWrongType
+	}
+	if s.zsets[k] == nil {
+		s.zsets[k] = make(map[string]float64)
+	}
+	next := s.zsets[k][string(member)] + delta
+	s.zsets[k][string(member)] = next
+	return next, nil
+}
+
+func (s *fakeStore) ZPopMin(ctx context.Context, db int, key string, count int64) ([]store.ZMember, error) {
+	return s.zpop(ctx, db, key, count, false)
+}
+
+func (s *fakeStore) ZPopMax(ctx context.Context, db int, key string, count int64) ([]store.ZMember, error) {
+	return s.zpop(ctx, db, key, count, true)
+}
+
+func (s *fakeStore) zpop(ctx context.Context, db int, key string, count int64, max bool) ([]store.ZMember, error) {
+	if count <= 0 {
+		count = 1
+	}
+	k := fakeKey(db, key)
+	if _, ok := s.strings[k]; ok {
+		return nil, store.ErrWrongType
+	}
+	z := s.zsets[k]
+	if len(z) == 0 {
+		return nil, nil
+	}
+	members, err := s.ZRangeByScore(ctx, db, key, store.ScoreBound{Infinite: -1}, store.ScoreBound{Infinite: 1}, 0, count, max)
+	if err != nil {
+		return nil, err
+	}
+	for _, member := range members {
+		delete(z, string(member.Member))
+	}
+	return members, nil
 }
 
 func (s *fakeStore) Scan(ctx context.Context, db int, cursor string, pattern string, count int) (store.ScanResult, error) {

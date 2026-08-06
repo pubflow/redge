@@ -194,4 +194,4 @@ This keeps sorted set members from becoming orphaned.
 
 D1 migrations use explicit single-statement HTTP calls where required by the D1 HTTP API.
 
-Hot-path commands use single parameterized HTTP calls. Cloudflare D1's HTTP `/raw` endpoint rejects multiple statements with params in one request, so Redge avoids unsafe multi-statement parameter batching for writes like `ZADD` and `DEL`.
+Hot-path commands use single parameterized HTTP calls. Cloudflare D1's HTTP `/raw` endpoint rejects multiple statements with params in one request, so Redge avoids unsafe multi-statement parameter batching for writes like `ZADD` and `DEL`. `ZINCRBY` and `ZPOPMIN`/`ZPOPMAX` on D1 therefore use sequential statements and do not provide the same transactional isolation as the SQL backends.

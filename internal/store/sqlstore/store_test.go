@@ -151,6 +151,53 @@ func TestIncrByUpdatesExistingStringWithoutDuplicateKey(t *testing.T) {
 	}
 }
 
+func TestZIncrByAndZPopOrder(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	if _, err := st.ZAdd(ctx, 0, "z", 1, []byte("a")); err != nil {
+		t.Fatalf("zadd a: %v", err)
+	}
+	if _, err := st.ZAdd(ctx, 0, "z", 3, []byte("c")); err != nil {
+		t.Fatalf("zadd c: %v", err)
+	}
+	if _, err := st.ZAdd(ctx, 0, "z", 2, []byte("b")); err != nil {
+		t.Fatalf("zadd b: %v", err)
+	}
+
+	score, err := st.ZIncrBy(ctx, 0, "z", []byte("a"), 4)
+	if err != nil {
+		t.Fatalf("zincrby: %v", err)
+	}
+	if score != 5 {
+		t.Fatalf("expected score 5, got %v", score)
+	}
+
+	min, err := st.ZPopMin(ctx, 0, "z", 1)
+	if err != nil {
+		t.Fatalf("zpopmin: %v", err)
+	}
+	if len(min) != 1 || string(min[0].Member) != "b" || min[0].Score != 2 {
+		t.Fatalf("unexpected popmin: %#v", min)
+	}
+
+	max, err := st.ZPopMax(ctx, 0, "z", 1)
+	if err != nil {
+		t.Fatalf("zpopmax: %v", err)
+	}
+	if len(max) != 1 || string(max[0].Member) != "a" || max[0].Score != 5 {
+		t.Fatalf("unexpected popmax: %#v", max)
+	}
+
+	card, err := st.ZCard(ctx, 0, "z")
+	if err != nil {
+		t.Fatalf("zcard: %v", err)
+	}
+	if card != 1 {
+		t.Fatalf("expected card 1, got %d", card)
+	}
+}
+
 func TestDocumentIndexesAreRebuiltOnUpdate(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)

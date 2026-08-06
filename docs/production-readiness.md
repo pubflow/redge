@@ -66,9 +66,9 @@ curl.exe "http://127.0.0.1:8080/v1/zsets/rankings/byscore?min=0&max=100" `
 ## Runtime Gate
 
 - HTTP health, index configuration, insert, get, patch, query, and delete pass against a real running process.
-- Store API `GET`, `PUT`, `DELETE`, batch get/set, `INCR`, TTL, scan, zset rank, and zset score routes pass against a real running process.
+- Store API `GET`, `PUT`, `DELETE`, batch get/set/exists/delete, `INCR`, TTL, `TYPE`, `EXISTS`, scan, zset rank/score, multi-member add/remove, `ZINCRBY`, and `ZPOPMIN`/`ZPOPMAX` routes pass against a real running process.
 - WebSocket connect, subscribe, event delivery, unsubscribe, and close pass against a real running process.
-- RESP smoke passes for classic and new commands: `PING`, `SET`, `GET`, `MSET`, `MGET`, `GETDEL`, `GETSET`, `PERSIST`, `ZADD`, `ZRANGEBYSCORE`, and `ZREVRANGEBYSCORE`.
+- RESP smoke passes for classic and new commands: `PING`, `SET`, `GET`, `MSET`, `MGET`, `GETDEL`, `GETSET`, `PERSIST`, `ZADD`, `ZRANGEBYSCORE`, `ZREVRANGEBYSCORE`, `ZINCRBY`, `ZPOPMIN`, and `ZPOPMAX`.
 
 ## Backend Gate
 
@@ -82,7 +82,7 @@ curl.exe "http://127.0.0.1:8080/v1/zsets/rankings/byscore?min=0&max=100" `
 - RESP string, TTL, counter, scan, simple transaction, and sorted-set subset.
 - Document API HTTP CRUD/query with explicit indexes.
 - Local-instance WebSocket realtime subscriptions.
-- Store API HTTP strings, TTL, counters, scans, and sorted sets.
+- Store API HTTP strings, TTL, counters, scans, key metadata, batch delete, and sorted sets (including incrby/pop).
 
 ## Current Non-Goals
 

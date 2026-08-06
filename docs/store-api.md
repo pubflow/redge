@@ -43,11 +43,15 @@ Prefer platform or reverse-proxy TLS for public HTTPS. Native Redis TLS remains 
 | `DELETE` | `/v1/kv/{key}` | Delete a key. |
 | `POST` | `/v1/kv/batch/get` | Read multiple keys. |
 | `POST` | `/v1/kv/batch/set` | Set multiple keys. |
+| `POST` | `/v1/kv/batch/exists` | Check existence for multiple keys. |
+| `POST` | `/v1/kv/batch/delete` | Delete multiple keys. |
 | `POST` | `/v1/kv/{key}/getdel` | Atomically get and delete. |
 | `POST` | `/v1/kv/{key}/incr` | Increment an integer value. |
 | `POST` | `/v1/kv/{key}/expire` | Set a seconds TTL. |
 | `POST` | `/v1/kv/{key}/persist` | Remove the TTL. |
 | `GET` | `/v1/kv/{key}/ttl` | Read TTL state. |
+| `GET` | `/v1/kv/{key}/type` | Read key type (`none`, `string`, `zset`). |
+| `GET` | `/v1/kv/{key}/exists` | Check whether a key exists. |
 | `GET` | `/v1/kv?match=prefix:*&cursor=0&limit=100` | Scan keys. |
 
 Writes accept either text or base64:
@@ -92,16 +96,20 @@ Missing keys return `404`. Wrong-type reads return `409` with `code: "wrong_type
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `POST` | `/v1/zsets/{key}/members` | Add or update one member score. |
+| `POST` | `/v1/zsets/{key}/members` | Add or update one member, or a `members` array (max 1000). |
 | `GET` | `/v1/zsets/{key}/members?start=0&stop=99` | Range by rank. |
+| `POST` | `/v1/zsets/{key}/members/remove` | Remove one or more members by body. |
 | `GET` | `/v1/zsets/{key}/byscore?min=0&max=100&limit=100&offset=0&rev=false` | Range by score. |
 | `DELETE` | `/v1/zsets/{key}/members/{member}` | Remove one text member. |
 | `DELETE` | `/v1/zsets/{key}/byscore?min=...&max=...` | Remove a score range. |
 | `GET` | `/v1/zsets/{key}/score/{member}` | Read a member score. |
 | `GET` | `/v1/zsets/{key}/count?min=...&max=...` | Count a score range. |
 | `GET` | `/v1/zsets/{key}/card` | Cardinality. |
+| `POST` | `/v1/zsets/{key}/incrby` | Increment a member score (`ZINCRBY`). |
+| `POST` | `/v1/zsets/{key}/popmin` | Pop lowest-score members (`ZPOPMIN`). |
+| `POST` | `/v1/zsets/{key}/popmax` | Pop highest-score members (`ZPOPMAX`). |
 
-Add/update:
+Add/update one member:
 
 ```json
 {"member":"alice","score":42}
@@ -113,8 +121,30 @@ or binary-safe:
 {"member_base64":"AP8=","score":42}
 ```
 
+or many members:
+
+```json
+{"members":[{"member":"alice","score":42},{"member":"bob","score":50}]}
+```
+
+Remove many:
+
+```json
+{"members":["alice","bob"]}
+```
+
+`POST .../incrby`:
+
+```json
+{"member":"alice","by":1.5}
+```
+
+`POST .../popmin` and `.../popmax` accept optional `{"count":1}` (default `1`, max `1000`).
+
 Score bounds support finite numbers, `-inf`, `+inf`, `inf`, and exclusive bounds such as `(10`.
+
+On SQL backends (SQLite/Postgres/MySQL), `ZINCRBY` and `ZPOP*` run inside a transaction with row locking. On Cloudflare D1, those ops use sequential HTTP statements and do not provide the same isolation guarantees.
 
 ## Scope
 
-Store API v1 covers strings, TTLs, counters, scans, and sorted sets. Lists, sets, hashes, streams, Lua, Pub/Sub, Redis Cluster, and Redis-over-HTTP are out of scope.
+Store API v1 covers strings, TTLs, counters, scans, key metadata (`TYPE`/`EXISTS`), batch delete, and sorted sets including multi-member writes, score increment, and pop. Lists, sets, hashes, streams, Lua, Pub/Sub, Redis Cluster, and Redis-over-HTTP are out of scope.

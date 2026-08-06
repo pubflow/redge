@@ -11,7 +11,7 @@ It is designed for applications that want Redis-like ergonomics while storing da
 - [Document API](./document-api.md): JSON document CRUD, explicit indexes, query, and WebSocket realtime.
 - [Store API](./store-api.md): public HTTP key-value and sorted-set primitives for app clients.
 - [Production Readiness](./production-readiness.md): release gates, runtime smoke tests, and deployment checklist.
-- [Client Examples](./client-examples.md): examples for `redis-cli`, `ioredis`, and `go-redis`.
+- [Client Examples](./client-examples.md): `@pubflow/redge` TypeScript SDK, plus `redis-cli`, `ioredis`, and `go-redis`.
 - [Admin API](./admin-api.md): health checks, readiness, cache metrics, cleanup, auth, and IP controls.
 - [Database Schema](./schema.md): tables, indexes, data encoding, TTL behavior, and backend differences.
 - [Cache](./cache.md): Ristretto/TinyLFU L1 cache behavior, metrics, sizing, and invalidation.

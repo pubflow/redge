@@ -184,6 +184,12 @@ func (r *Router) execute(ctx context.Context, s *Session, args []string) []byte 
 		return r.zscore(ctx, s, args)
 	case "ZCOUNT":
 		return r.zcount(ctx, s, args)
+	case "ZINCRBY":
+		return r.zincrby(ctx, s, args)
+	case "ZPOPMIN":
+		return r.zpop(ctx, s, args, false)
+	case "ZPOPMAX":
+		return r.zpop(ctx, s, args, true)
 	case "SCAN":
 		return r.scan(ctx, s, args)
 	default:
@@ -781,6 +787,59 @@ func (r *Router) zcount(ctx context.Context, s *Session, args []string) []byte {
 		return mapErr(err)
 	}
 	return resp.Int(n)
+}
+
+func (r *Router) zincrby(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) != 4 {
+		return resp.Error("ERR wrong number of arguments for 'zincrby' command")
+	}
+	delta, err := strconv.ParseFloat(args[2], 64)
+	if err != nil {
+		return resp.Error("ERR value is not a valid float")
+	}
+	score, err := r.store.ZIncrBy(ctx, s.DB, args[1], []byte(args[3]), delta)
+	if err != nil {
+		return mapErr(err)
+	}
+	r.cache.Del(cacheKey(s.DB, args[1]))
+	return resp.Bulk([]byte(formatScore(score)))
+}
+
+func (r *Router) zpop(ctx context.Context, s *Session, args []string, max bool) []byte {
+	cmd := "zpopmin"
+	if max {
+		cmd = "zpopmax"
+	}
+	if len(args) != 2 && len(args) != 3 {
+		return resp.Error("ERR wrong number of arguments for '" + cmd + "' command")
+	}
+	count := int64(1)
+	if len(args) == 3 {
+		n, err := strconv.ParseInt(args[2], 10, 64)
+		if err != nil || n < 0 {
+			return resp.Error("ERR value is not an integer or out of range")
+		}
+		count = n
+	}
+	var (
+		members []store.ZMember
+		err     error
+	)
+	if max {
+		members, err = r.store.ZPopMax(ctx, s.DB, args[1], count)
+	} else {
+		members, err = r.store.ZPopMin(ctx, s.DB, args[1], count)
+	}
+	if err != nil {
+		return mapErr(err)
+	}
+	r.cache.Del(cacheKey(s.DB, args[1]))
+	items := make([][]byte, 0, len(members)*2)
+	for _, member := range members {
+		items = append(items, resp.Bulk(member.Member))
+		items = append(items, resp.Bulk([]byte(formatScore(member.Score))))
+	}
+	return resp.Array(items...)
 }
 
 func (r *Router) scan(ctx context.Context, s *Session, args []string) []byte {

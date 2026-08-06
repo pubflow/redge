@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
@@ -175,13 +176,17 @@ func (s *Server) routeKV(w http.ResponseWriter, r *http.Request) {
 		s.batchGet(w, r)
 	case raw == "batch/set":
 		s.batchSet(w, r)
+	case raw == "batch/exists":
+		s.batchExists(w, r)
+	case raw == "batch/delete":
+		s.batchDelete(w, r)
 	default:
 		s.keyRoute(w, r, raw)
 	}
 }
 
 func (s *Server) keyRoute(w http.ResponseWriter, r *http.Request, raw string) {
-	key, action, ok := splitKeyAction(raw, "getdel", "incr", "expire", "persist", "ttl")
+	key, action, ok := splitKeyAction(raw, "getdel", "incr", "expire", "persist", "ttl", "type", "exists")
 	if !ok || key == "" {
 		writeError(w, http.StatusBadRequest, "invalid_key", "invalid key")
 		return
@@ -208,6 +213,10 @@ func (s *Server) keyRoute(w http.ResponseWriter, r *http.Request, raw string) {
 		requireMethod(w, r, http.MethodPost, func() { s.persist(w, r, key) })
 	case "ttl":
 		requireMethod(w, r, http.MethodGet, func() { s.ttl(w, r, key) })
+	case "type":
+		requireMethod(w, r, http.MethodGet, func() { s.keyType(w, r, key) })
+	case "exists":
+		requireMethod(w, r, http.MethodGet, func() { s.keyExists(w, r, key) })
 	}
 }
 
@@ -276,6 +285,98 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request, key string) {
 	}
 	s.delCache(db, key)
 	writeJSON(w, http.StatusOK, map[string]any{"db": db, "key": key, "deleted": n})
+}
+
+func (s *Server) keyType(w http.ResponseWriter, r *http.Request, key string) {
+	db, ok := queryInt(w, r, "db", 0, 0, 1024)
+	if !ok {
+		return
+	}
+	typ, err := s.opts.Store.Type(r.Context(), db, key)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"db": db, "key": key, "type": typ})
+}
+
+func (s *Server) keyExists(w http.ResponseWriter, r *http.Request, key string) {
+	db, ok := queryInt(w, r, "db", 0, 0, 1024)
+	if !ok {
+		return
+	}
+	n, err := s.opts.Store.Exists(r.Context(), db, key)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"db": db, "key": key, "exists": n > 0})
+}
+
+func (s *Server) batchExists(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	db, ok := queryInt(w, r, "db", 0, 0, 1024)
+	if !ok {
+		return
+	}
+	var req struct {
+		Keys []string `json:"keys"`
+	}
+	if !decodeBody(w, r, s.opts.MaxBodyBytes, &req) {
+		return
+	}
+	if len(req.Keys) > 1000 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "keys is limited to 1000 items")
+		return
+	}
+	items := make([]map[string]any, 0, len(req.Keys))
+	var count int64
+	for _, key := range req.Keys {
+		n, err := s.opts.Store.Exists(r.Context(), db, key)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		exists := n > 0
+		if exists {
+			count++
+		}
+		items = append(items, map[string]any{"key": key, "exists": exists})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"db": db, "count": count, "items": items})
+}
+
+func (s *Server) batchDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	db, ok := queryInt(w, r, "db", 0, 0, 1024)
+	if !ok {
+		return
+	}
+	var req struct {
+		Keys []string `json:"keys"`
+	}
+	if !decodeBody(w, r, s.opts.MaxBodyBytes, &req) {
+		return
+	}
+	if len(req.Keys) > 1000 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "keys is limited to 1000 items")
+		return
+	}
+	n, err := s.opts.Store.Delete(r.Context(), db, req.Keys...)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	for _, key := range req.Keys {
+		s.delCache(db, key)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"db": db, "deleted": n})
 }
 
 func (s *Server) batchGet(w http.ResponseWriter, r *http.Request) {
@@ -510,6 +611,10 @@ func (s *Server) routeZSet(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		if tail == "remove" {
+			requireMethod(w, r, http.MethodPost, func() { s.zremMany(w, r, key) })
+			return
+		}
 		requireMethod(w, r, http.MethodDelete, func() { s.zrem(w, r, key, tail) })
 	case "byscore":
 		switch r.Method {
@@ -526,6 +631,12 @@ func (s *Server) routeZSet(w http.ResponseWriter, r *http.Request) {
 		requireMethod(w, r, http.MethodGet, func() { s.zcount(w, r, key) })
 	case "card":
 		requireMethod(w, r, http.MethodGet, func() { s.zcard(w, r, key) })
+	case "incrby":
+		requireMethod(w, r, http.MethodPost, func() { s.zincrby(w, r, key) })
+	case "popmin":
+		requireMethod(w, r, http.MethodPost, func() { s.zpop(w, r, key, false) })
+	case "popmax":
+		requireMethod(w, r, http.MethodPost, func() { s.zpop(w, r, key, true) })
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "not found")
 	}
@@ -540,21 +651,95 @@ func (s *Server) zadd(w http.ResponseWriter, r *http.Request, key string) {
 		Score        float64 `json:"score"`
 		Member       string  `json:"member"`
 		MemberBase64 string  `json:"member_base64"`
+		Members      []struct {
+			Score        float64 `json:"score"`
+			Member       string  `json:"member"`
+			MemberBase64 string  `json:"member_base64"`
+		} `json:"members"`
 	}
 	if !decodeBody(w, r, s.opts.MaxBodyBytes, &req) {
 		return
 	}
-	member, ok := requestBytes(w, req.Member, req.MemberBase64)
+	type scoredMember struct {
+		score  float64
+		member []byte
+	}
+	entries := make([]scoredMember, 0)
+	if len(req.Members) > 0 {
+		if len(req.Members) > 1000 {
+			writeError(w, http.StatusBadRequest, "invalid_request", "members is limited to 1000 items")
+			return
+		}
+		for _, item := range req.Members {
+			member, ok := requestBytes(w, item.Member, item.MemberBase64)
+			if !ok {
+				return
+			}
+			if len(member) == 0 && item.Member == "" && item.MemberBase64 == "" {
+				writeError(w, http.StatusBadRequest, "invalid_request", "member is required")
+				return
+			}
+			entries = append(entries, scoredMember{score: item.Score, member: member})
+		}
+	} else {
+		member, ok := requestBytes(w, req.Member, req.MemberBase64)
+		if !ok {
+			return
+		}
+		entries = append(entries, scoredMember{score: req.Score, member: member})
+	}
+	var added int64
+	for _, entry := range entries {
+		n, err := s.opts.Store.ZAdd(r.Context(), db, key, entry.score, entry.member)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		added += n
+	}
+	s.delCache(db, key)
+	writeJSON(w, http.StatusOK, map[string]any{"db": db, "key": key, "added": added})
+}
+
+func (s *Server) zremMany(w http.ResponseWriter, r *http.Request, key string) {
+	db, ok := queryInt(w, r, "db", 0, 0, 1024)
 	if !ok {
 		return
 	}
-	added, err := s.opts.Store.ZAdd(r.Context(), db, key, req.Score, member)
+	var req struct {
+		Members         []string `json:"members"`
+		MembersBase64   []string `json:"members_base64"`
+	}
+	if !decodeBody(w, r, s.opts.MaxBodyBytes, &req) {
+		return
+	}
+	members := make([][]byte, 0, len(req.Members)+len(req.MembersBase64))
+	for _, member := range req.Members {
+		members = append(members, []byte(member))
+	}
+	for _, encoded := range req.MembersBase64 {
+		data, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_base64", "members_base64 is invalid")
+			return
+		}
+		members = append(members, data)
+	}
+	if len(members) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "members is required")
+		return
+	}
+	if len(members) > 1000 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "members is limited to 1000 items")
+		return
+	}
+	removed, err := s.opts.Store.ZRem(r.Context(), db, key, members...)
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	s.delCache(db, key)
-	writeJSON(w, http.StatusOK, map[string]any{"db": db, "key": key, "added": added})
+	writeJSON(w, http.StatusOK, map[string]any{"db": db, "key": key, "removed": removed})
 }
 
 func (s *Server) zrange(w http.ResponseWriter, r *http.Request, key string) {
@@ -695,6 +880,77 @@ func (s *Server) zcard(w http.ResponseWriter, r *http.Request, key string) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"db": db, "key": key, "card": n})
+}
+
+func (s *Server) zincrby(w http.ResponseWriter, r *http.Request, key string) {
+	db, ok := queryInt(w, r, "db", 0, 0, 1024)
+	if !ok {
+		return
+	}
+	var req struct {
+		Member       string  `json:"member"`
+		MemberBase64 string  `json:"member_base64"`
+		By           float64 `json:"by"`
+	}
+	if !decodeBody(w, r, s.opts.MaxBodyBytes, &req) {
+		return
+	}
+	member, ok := requestBytes(w, req.Member, req.MemberBase64)
+	if !ok {
+		return
+	}
+	if len(member) == 0 && req.Member == "" && req.MemberBase64 == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "member is required")
+		return
+	}
+	score, err := s.opts.Store.ZIncrBy(r.Context(), db, key, member, req.By)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	s.delCache(db, key)
+	out := map[string]any{"db": db, "key": key, "score": score}
+	if utf8.Valid(member) {
+		out["member"] = string(member)
+	} else {
+		out["member_base64"] = base64.StdEncoding.EncodeToString(member)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) zpop(w http.ResponseWriter, r *http.Request, key string, max bool) {
+	db, ok := queryInt(w, r, "db", 0, 0, 1024)
+	if !ok {
+		return
+	}
+	var req struct {
+		Count int64 `json:"count"`
+	}
+	if !decodeBodyOptional(w, r, s.opts.MaxBodyBytes, &req) {
+		return
+	}
+	if req.Count <= 0 {
+		req.Count = 1
+	}
+	if req.Count > 1000 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "count is limited to 1000")
+		return
+	}
+	var (
+		members []store.ZMember
+		err     error
+	)
+	if max {
+		members, err = s.opts.Store.ZPopMax(r.Context(), db, key, req.Count)
+	} else {
+		members, err = s.opts.Store.ZPopMin(r.Context(), db, key, req.Count)
+	}
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	s.delCache(db, key)
+	writeJSON(w, http.StatusOK, map[string]any{"db": db, "key": key, "members": zitems(members)})
 }
 
 type writeValueRequest struct {
@@ -872,6 +1128,20 @@ func decodeBody(w http.ResponseWriter, r *http.Request, maxBytes int64, out any)
 	reader := http.MaxBytesReader(nil, r.Body, maxBytes)
 	dec := json.NewDecoder(reader)
 	if err := dec.Decode(out); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return false
+	}
+	return true
+}
+
+func decodeBodyOptional(w http.ResponseWriter, r *http.Request, maxBytes int64, out any) bool {
+	defer r.Body.Close()
+	reader := http.MaxBytesReader(nil, r.Body, maxBytes)
+	dec := json.NewDecoder(reader)
+	if err := dec.Decode(out); err != nil {
+		if errors.Is(err, io.EOF) {
+			return true
+		}
 		writeError(w, http.StatusBadRequest, "invalid_json", "invalid JSON body")
 		return false
 	}

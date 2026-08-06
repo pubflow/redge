@@ -2,7 +2,25 @@
 
 Redge speaks RESP2, so clients connect as if they were talking to Redis or Valkey.
 
-The examples assume Redge is running on `127.0.0.1:6379`.
+For Document API, Store HTTP API, WebSocket subscriptions, and Admin inspection, use the TypeScript SDK:
+
+```sh
+npm install @pubflow/redge
+```
+
+```ts
+import { createClient } from "@pubflow/redge";
+
+const redge = createClient({
+  baseUrl: "http://127.0.0.1:8080",
+  token: process.env.REDGE_API_TOKEN
+});
+
+await redge.kv.exists("session:1");
+await redge.zsets.incrBy("rankings", "alice", 1);
+```
+
+The examples below assume Redge is running on `127.0.0.1:6379` for Redis/Valkey protocol clients.
 
 ## Connection URLs
 

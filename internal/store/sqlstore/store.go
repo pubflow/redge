@@ -656,6 +656,94 @@ func (s *Store) ZCount(ctx context.Context, db int, key string, min, max store.S
 	return n, err
 }
 
+func (s *Store) ZIncrBy(ctx context.Context, db int, key string, member []byte, delta float64) (float64, error) {
+	hash := memberHash(member)
+	var out float64
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		keyRow, found, err := s.getLiveRowTx(ctx, tx, db, key, true)
+		if err != nil {
+			return err
+		}
+		now := time.Now()
+		if found && keyRow.Type != typeZSet {
+			return store.ErrWrongType
+		}
+		if !found {
+			if err := tx.Create(&KeyRow{DB: db, Key: key, Type: typeZSet, Version: 1, CreatedAt: now, UpdatedAt: now}).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Model(keyRow).Updates(map[string]any{"version": keyRow.Version + 1, "updated_at": now}).Error; err != nil {
+				return err
+			}
+		}
+		var existing ZSetMemberRow
+		err = tx.Where("db = ? AND "+s.keyCol()+" = ? AND member_hash = ?", db, key, hash).First(&existing).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			out = delta
+			return tx.Create(&ZSetMemberRow{DB: db, Key: key, MemberHash: hash, Member: member, Score: out, CreatedAt: now, UpdatedAt: now}).Error
+		}
+		if err != nil {
+			return err
+		}
+		out = existing.Score + delta
+		return tx.Model(&existing).Updates(map[string]any{"score": out, "member": member, "updated_at": now}).Error
+	})
+	return out, err
+}
+
+func (s *Store) ZPopMin(ctx context.Context, db int, key string, count int64) ([]store.ZMember, error) {
+	return s.zpop(ctx, db, key, count, false)
+}
+
+func (s *Store) ZPopMax(ctx context.Context, db int, key string, count int64) ([]store.ZMember, error) {
+	return s.zpop(ctx, db, key, count, true)
+}
+
+func (s *Store) zpop(ctx context.Context, db int, key string, count int64, max bool) ([]store.ZMember, error) {
+	if count <= 0 {
+		count = 1
+	}
+	var out []store.ZMember
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		keyRow, found, err := s.getLiveRowTx(ctx, tx, db, key, true)
+		if err != nil {
+			return err
+		}
+		if !found {
+			out = nil
+			return nil
+		}
+		if keyRow.Type != typeZSet {
+			return store.ErrWrongType
+		}
+		order := "score ASC, member ASC"
+		if max {
+			order = "score DESC, member DESC"
+		}
+		var rows []ZSetMemberRow
+		if err := tx.Where("db = ? AND "+s.keyCol()+" = ?", db, key).Order(order).Limit(int(count)).Find(&rows).Error; err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			out = nil
+			return nil
+		}
+		hashes := make([]string, 0, len(rows))
+		out = make([]store.ZMember, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, store.ZMember{Member: row.Member, Score: row.Score})
+			hashes = append(hashes, row.MemberHash)
+		}
+		if err := tx.Where("db = ? AND "+s.keyCol()+" = ? AND member_hash IN ?", db, key, hashes).Delete(&ZSetMemberRow{}).Error; err != nil {
+			return err
+		}
+		now := time.Now()
+		return tx.Model(keyRow).Updates(map[string]any{"version": keyRow.Version + 1, "updated_at": now}).Error
+	})
+	return out, err
+}
+
 func (s *Store) Scan(ctx context.Context, db int, cursor string, pattern string, count int) (store.ScanResult, error) {
 	if count <= 0 {
 		count = 10
