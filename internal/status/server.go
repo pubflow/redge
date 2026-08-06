@@ -20,6 +20,7 @@ type Options struct {
 	Store        store.Store
 	DatabaseType string
 	Logger       *zap.Logger
+	Mount        func(*http.ServeMux)
 }
 
 type Server struct {
@@ -33,6 +34,9 @@ func New(opts Options) *Server {
 	mux.Handle("/health", s.secure(http.HandlerFunc(s.health)))
 	mux.Handle("/ready", s.secure(http.HandlerFunc(s.ready)))
 	mux.Handle("/version", s.secure(http.HandlerFunc(s.version)))
+	if opts.Mount != nil {
+		opts.Mount(mux)
+	}
 	s.srv = &http.Server{Addr: opts.Addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	return s
 }

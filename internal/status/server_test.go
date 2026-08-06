@@ -41,6 +41,27 @@ func TestStatusRejectsNonGet(t *testing.T) {
 	}
 }
 
+func TestStatusMountsAppRoutes(t *testing.T) {
+	srv := New(Options{
+		Store:        statusTestStore{},
+		Logger:       zap.NewNop(),
+		DatabaseType: "sqlite",
+		Mount: func(mux *http.ServeMux) {
+			mux.HandleFunc("/v1/ping", func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusAccepted)
+			})
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/ping", nil)
+	rec := httptest.NewRecorder()
+
+	srv.srv.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected mounted route status 202, got %d", rec.Code)
+	}
+}
+
 type statusTestStore struct{}
 
 func (statusTestStore) Migrate(ctx context.Context) error { return nil }
@@ -51,7 +72,16 @@ func (statusTestStore) Type(ctx context.Context, db int, key string) (string, er
 func (statusTestStore) Get(ctx context.Context, db int, key string) (*store.Value, error) {
 	return nil, nil
 }
+func (statusTestStore) MGet(ctx context.Context, db int, keys ...string) ([]*store.Value, error) {
+	return make([]*store.Value, len(keys)), nil
+}
 func (statusTestStore) Set(ctx context.Context, db int, key string, value []byte, opts store.SetOptions) (*store.Value, bool, error) {
+	return nil, false, nil
+}
+func (statusTestStore) MSet(ctx context.Context, db int, pairs []store.KeyValue, opts store.SetOptions) error {
+	return nil
+}
+func (statusTestStore) GetDel(ctx context.Context, db int, key string) (*store.Value, bool, error) {
 	return nil, false, nil
 }
 func (statusTestStore) Delete(ctx context.Context, db int, keys ...string) (int64, error) {
@@ -61,6 +91,9 @@ func (statusTestStore) Exists(ctx context.Context, db int, keys ...string) (int6
 	return 0, nil
 }
 func (statusTestStore) Expire(ctx context.Context, db int, key string, ttl time.Duration) (bool, error) {
+	return false, nil
+}
+func (statusTestStore) Persist(ctx context.Context, db int, key string) (bool, error) {
 	return false, nil
 }
 func (statusTestStore) TTL(ctx context.Context, db int, key string) (time.Duration, bool, bool, error) {
@@ -82,6 +115,9 @@ func (statusTestStore) ZRemRangeByScore(ctx context.Context, db int, key string,
 	return 0, nil
 }
 func (statusTestStore) ZRange(ctx context.Context, db int, key string, start, stop int64) ([]store.ZMember, error) {
+	return nil, nil
+}
+func (statusTestStore) ZRangeByScore(ctx context.Context, db int, key string, min, max store.ScoreBound, offset, limit int64, rev bool) ([]store.ZMember, error) {
 	return nil, nil
 }
 func (statusTestStore) ZScore(ctx context.Context, db int, key string, member []byte) (float64, bool, error) {

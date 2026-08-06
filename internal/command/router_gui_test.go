@@ -81,6 +81,29 @@ func TestGUICompatibilityMemoryUsage(t *testing.T) {
 	mustReply(t, router, session, []string{"MEMORY", "USAGE", "leaderboard"}, ":75\r\n")
 }
 
+func TestRESPBatchAndFetchMutatingStringCommands(t *testing.T) {
+	router, session := newGUITestRouter()
+
+	mustReply(t, router, session, []string{"MSET", "a", "1", "b", "2"}, "+OK\r\n")
+	mustReply(t, router, session, []string{"MGET", "a", "missing", "b"}, "*3\r\n$1\r\n1\r\n$-1\r\n$1\r\n2\r\n")
+	mustReply(t, router, session, []string{"SETNX", "a", "x"}, ":0\r\n")
+	mustReply(t, router, session, []string{"SETNX", "c", "3"}, ":1\r\n")
+	mustReply(t, router, session, []string{"GETSET", "c", "4"}, "$1\r\n3\r\n")
+	mustReply(t, router, session, []string{"GETDEL", "c"}, "$1\r\n4\r\n")
+	mustReply(t, router, session, []string{"GET", "c"}, "$-1\r\n")
+}
+
+func TestRESPPersistAndZRangeByScore(t *testing.T) {
+	router, session := newGUITestRouter()
+
+	mustReply(t, router, session, []string{"SET", "ttl-key", "value", "EX", "60"}, "+OK\r\n")
+	mustReply(t, router, session, []string{"PERSIST", "ttl-key"}, ":1\r\n")
+	mustReply(t, router, session, []string{"PERSIST", "ttl-key"}, ":0\r\n")
+	mustReply(t, router, session, []string{"ZADD", "z", "1", "one", "2", "two", "3", "three"}, ":3\r\n")
+	mustReply(t, router, session, []string{"ZRANGEBYSCORE", "z", "1", "3", "WITHSCORES", "LIMIT", "1", "2"}, "*4\r\n$3\r\ntwo\r\n$1\r\n2\r\n$5\r\nthree\r\n$1\r\n3\r\n")
+	mustReply(t, router, session, []string{"ZREVRANGEBYSCORE", "z", "3", "1", "LIMIT", "0", "1"}, "*1\r\n$5\r\nthree\r\n")
+}
+
 func newGUITestRouter() (*Router, *Session) {
 	return NewRouter(RouterOptions{
 		Store: &fakeStore{
@@ -102,6 +125,7 @@ func mustReply(t *testing.T, router *Router, session *Session, args []string, wa
 type fakeStore struct {
 	strings map[string][]byte
 	zsets   map[string]map[string]float64
+	ttl     map[string]bool
 }
 
 func fakeKey(db int, key string) string {
@@ -134,6 +158,18 @@ func (s *fakeStore) Get(ctx context.Context, db int, key string) (*store.Value, 
 	return &store.Value{Type: store.TypeString, Data: append([]byte(nil), v...)}, nil
 }
 
+func (s *fakeStore) MGet(ctx context.Context, db int, keys ...string) ([]*store.Value, error) {
+	out := make([]*store.Value, len(keys))
+	for i, key := range keys {
+		v, err := s.Get(ctx, db, key)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = v
+	}
+	return out, nil
+}
+
 func (s *fakeStore) Set(ctx context.Context, db int, key string, value []byte, opts store.SetOptions) (*store.Value, bool, error) {
 	k := fakeKey(db, key)
 	if _, ok := s.zsets[k]; ok {
@@ -147,7 +183,31 @@ func (s *fakeStore) Set(ctx context.Context, db int, key string, value []byte, o
 		return nil, false, nil
 	}
 	s.strings[k] = append([]byte(nil), value...)
+	if opts.TTL > 0 {
+		if s.ttl == nil {
+			s.ttl = map[string]bool{}
+		}
+		s.ttl[k] = true
+	}
 	return old, true, nil
+}
+
+func (s *fakeStore) MSet(ctx context.Context, db int, pairs []store.KeyValue, opts store.SetOptions) error {
+	for _, pair := range pairs {
+		if _, _, err := s.Set(ctx, db, pair.Key, pair.Value, opts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *fakeStore) GetDel(ctx context.Context, db int, key string) (*store.Value, bool, error) {
+	v, err := s.Get(ctx, db, key)
+	if err != nil || v == nil {
+		return v, false, err
+	}
+	_, err = s.Delete(ctx, db, key)
+	return v, err == nil, err
 }
 
 func (s *fakeStore) Delete(ctx context.Context, db int, keys ...string) (int64, error) {
@@ -156,6 +216,7 @@ func (s *fakeStore) Delete(ctx context.Context, db int, keys ...string) (int64, 
 		k := fakeKey(db, key)
 		if _, ok := s.strings[k]; ok {
 			delete(s.strings, k)
+			delete(s.ttl, k)
 			n++
 		}
 		if _, ok := s.zsets[k]; ok {
@@ -178,12 +239,27 @@ func (s *fakeStore) Exists(ctx context.Context, db int, keys ...string) (int64, 
 
 func (s *fakeStore) Expire(ctx context.Context, db int, key string, ttl time.Duration) (bool, error) {
 	typ, _ := s.Type(ctx, db, key)
+	if typ != store.TypeNone {
+		if s.ttl == nil {
+			s.ttl = map[string]bool{}
+		}
+		s.ttl[fakeKey(db, key)] = true
+	}
 	return typ != store.TypeNone, nil
+}
+
+func (s *fakeStore) Persist(ctx context.Context, db int, key string) (bool, error) {
+	k := fakeKey(db, key)
+	if s.ttl != nil && s.ttl[k] {
+		delete(s.ttl, k)
+		return true, nil
+	}
+	return false, nil
 }
 
 func (s *fakeStore) TTL(ctx context.Context, db int, key string) (time.Duration, bool, bool, error) {
 	typ, _ := s.Type(ctx, db, key)
-	return 0, typ != store.TypeNone, false, nil
+	return 0, typ != store.TypeNone, s.ttl != nil && s.ttl[fakeKey(db, key)], nil
 }
 
 func (s *fakeStore) IncrBy(ctx context.Context, db int, key string, delta int64) (int64, error) {
@@ -255,6 +331,56 @@ func (s *fakeStore) ZRange(ctx context.Context, db int, key string, start, stop 
 		out = append(out, store.ZMember{Member: []byte(member), Score: z[member]})
 	}
 	return out, nil
+}
+
+func (s *fakeStore) ZRangeByScore(ctx context.Context, db int, key string, min, max store.ScoreBound, offset, limit int64, rev bool) ([]store.ZMember, error) {
+	z := s.zsets[fakeKey(db, key)]
+	out := make([]store.ZMember, 0, len(z))
+	for member, score := range z {
+		if scoreInRange(score, min, max) {
+			out = append(out, store.ZMember{Member: []byte(member), Score: score})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Score == out[j].Score {
+			if rev {
+				return string(out[i].Member) > string(out[j].Member)
+			}
+			return string(out[i].Member) < string(out[j].Member)
+		}
+		if rev {
+			return out[i].Score > out[j].Score
+		}
+		return out[i].Score < out[j].Score
+	})
+	if offset > int64(len(out)) {
+		return nil, nil
+	}
+	out = out[offset:]
+	if limit >= 0 && limit < int64(len(out)) {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func scoreInRange(score float64, min, max store.ScoreBound) bool {
+	if min.Infinite == 0 {
+		if min.Exclusive && score <= min.Value {
+			return false
+		}
+		if !min.Exclusive && score < min.Value {
+			return false
+		}
+	}
+	if max.Infinite == 0 {
+		if max.Exclusive && score >= max.Value {
+			return false
+		}
+		if !max.Exclusive && score > max.Value {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *fakeStore) ZScore(ctx context.Context, db int, key string, member []byte) (float64, bool, error) {

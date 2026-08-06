@@ -134,8 +134,18 @@ func (r *Router) execute(ctx context.Context, s *Session, args []string) []byte 
 		return resp.Array(items...)
 	case "GET":
 		return r.get(ctx, s, args)
+	case "MGET":
+		return r.mget(ctx, s, args)
 	case "SET":
 		return r.set(ctx, s, args)
+	case "MSET":
+		return r.mset(ctx, s, args)
+	case "SETNX":
+		return r.setnx(ctx, s, args)
+	case "GETSET":
+		return r.getset(ctx, s, args)
+	case "GETDEL":
+		return r.getdel(ctx, s, args)
 	case "SETEX":
 		return r.setex(ctx, s, args)
 	case "DEL":
@@ -144,6 +154,8 @@ func (r *Router) execute(ctx context.Context, s *Session, args []string) []byte 
 		return r.exists(ctx, s, args)
 	case "EXPIRE":
 		return r.expire(ctx, s, args)
+	case "PERSIST":
+		return r.persist(ctx, s, args)
 	case "TTL":
 		return r.ttl(ctx, s, args, time.Second)
 	case "PTTL":
@@ -164,6 +176,10 @@ func (r *Router) execute(ctx context.Context, s *Session, args []string) []byte 
 		return r.zremRangeByScore(ctx, s, args)
 	case "ZRANGE":
 		return r.zrange(ctx, s, args)
+	case "ZRANGEBYSCORE":
+		return r.zrangeByScore(ctx, s, args, false)
+	case "ZREVRANGEBYSCORE":
+		return r.zrangeByScore(ctx, s, args, true)
 	case "ZSCORE":
 		return r.zscore(ctx, s, args)
 	case "ZCOUNT":
@@ -330,6 +346,25 @@ func (r *Router) get(ctx context.Context, s *Session, args []string) []byte {
 	return resp.Bulk(v.Data)
 }
 
+func (r *Router) mget(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) < 2 {
+		return resp.Error("ERR wrong number of arguments for 'mget' command")
+	}
+	values, err := r.store.MGet(ctx, s.DB, args[1:]...)
+	if err != nil {
+		return mapErr(err)
+	}
+	items := make([][]byte, 0, len(values))
+	for _, v := range values {
+		if v == nil {
+			items = append(items, resp.NullBulk())
+			continue
+		}
+		items = append(items, resp.Bulk(v.Data))
+	}
+	return resp.Array(items...)
+}
+
 func (r *Router) set(ctx context.Context, s *Session, args []string) []byte {
 	if len(args) < 3 {
 		return resp.Error("ERR wrong number of arguments for 'set' command")
@@ -386,6 +421,68 @@ func (r *Router) set(ctx context.Context, s *Session, args []string) []byte {
 	return resp.Simple("OK")
 }
 
+func (r *Router) mset(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) < 3 || len(args)%2 == 0 {
+		return resp.Error("ERR wrong number of arguments for 'mset' command")
+	}
+	pairs := make([]store.KeyValue, 0, (len(args)-1)/2)
+	for i := 1; i < len(args); i += 2 {
+		pairs = append(pairs, store.KeyValue{Key: args[i], Value: []byte(args[i+1])})
+	}
+	if err := r.store.MSet(ctx, s.DB, pairs, store.SetOptions{}); err != nil {
+		return mapErr(err)
+	}
+	for _, pair := range pairs {
+		r.cache.Del(cacheKey(s.DB, pair.Key))
+	}
+	return resp.Simple("OK")
+}
+
+func (r *Router) setnx(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) != 3 {
+		return resp.Error("ERR wrong number of arguments for 'setnx' command")
+	}
+	_, wrote, err := r.store.Set(ctx, s.DB, args[1], []byte(args[2]), store.SetOptions{NX: true})
+	if err != nil {
+		return mapErr(err)
+	}
+	r.cache.Del(cacheKey(s.DB, args[1]))
+	if wrote {
+		return resp.Int(1)
+	}
+	return resp.Int(0)
+}
+
+func (r *Router) getset(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) != 3 {
+		return resp.Error("ERR wrong number of arguments for 'getset' command")
+	}
+	old, _, err := r.store.Set(ctx, s.DB, args[1], []byte(args[2]), store.SetOptions{Get: true})
+	if err != nil {
+		return mapErr(err)
+	}
+	r.cache.Del(cacheKey(s.DB, args[1]))
+	if old == nil {
+		return resp.NullBulk()
+	}
+	return resp.Bulk(old.Data)
+}
+
+func (r *Router) getdel(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) != 2 {
+		return resp.Error("ERR wrong number of arguments for 'getdel' command")
+	}
+	v, _, err := r.store.GetDel(ctx, s.DB, args[1])
+	if err != nil {
+		return mapErr(err)
+	}
+	r.cache.Del(cacheKey(s.DB, args[1]))
+	if v == nil {
+		return resp.NullBulk()
+	}
+	return resp.Bulk(v.Data)
+}
+
 func (r *Router) del(ctx context.Context, s *Session, args []string) []byte {
 	if len(args) < 2 {
 		return resp.Error("ERR wrong number of arguments for 'del' command")
@@ -420,6 +517,21 @@ func (r *Router) expire(ctx context.Context, s *Session, args []string) []byte {
 		return resp.Error("ERR value is not an integer or out of range")
 	}
 	ok, err := r.store.Expire(ctx, s.DB, args[1], time.Duration(sec)*time.Second)
+	if err != nil {
+		return mapErr(err)
+	}
+	r.cache.Del(cacheKey(s.DB, args[1]))
+	if ok {
+		return resp.Int(1)
+	}
+	return resp.Int(0)
+}
+
+func (r *Router) persist(ctx context.Context, s *Session, args []string) []byte {
+	if len(args) != 2 {
+		return resp.Error("ERR wrong number of arguments for 'persist' command")
+	}
+	ok, err := r.store.Persist(ctx, s.DB, args[1])
 	if err != nil {
 		return mapErr(err)
 	}
@@ -560,6 +672,71 @@ func (r *Router) zrange(ctx context.Context, s *Session, args []string) []byte {
 		withScores = true
 	}
 	members, err := r.store.ZRange(ctx, s.DB, args[1], start, stop)
+	if err != nil {
+		return mapErr(err)
+	}
+	items := make([][]byte, 0, len(members)*2)
+	for _, member := range members {
+		items = append(items, resp.Bulk(member.Member))
+		if withScores {
+			items = append(items, resp.Bulk([]byte(formatScore(member.Score))))
+		}
+	}
+	return resp.Array(items...)
+}
+
+func (r *Router) zrangeByScore(ctx context.Context, s *Session, args []string, rev bool) []byte {
+	cmd := strings.ToLower(args[0])
+	if len(args) < 4 {
+		return resp.Error("ERR wrong number of arguments for '" + cmd + "' command")
+	}
+	var min, max store.ScoreBound
+	var err error
+	if rev {
+		max, err = parseScoreBound(args[2])
+		if err != nil {
+			return resp.Error("ERR min or max is not a float")
+		}
+		min, err = parseScoreBound(args[3])
+		if err != nil {
+			return resp.Error("ERR min or max is not a float")
+		}
+	} else {
+		min, err = parseScoreBound(args[2])
+		if err != nil {
+			return resp.Error("ERR min or max is not a float")
+		}
+		max, err = parseScoreBound(args[3])
+		if err != nil {
+			return resp.Error("ERR min or max is not a float")
+		}
+	}
+	offset := int64(0)
+	limit := int64(-1)
+	withScores := false
+	for i := 4; i < len(args); i++ {
+		switch strings.ToUpper(args[i]) {
+		case "WITHSCORES":
+			withScores = true
+		case "LIMIT":
+			if i+2 >= len(args) {
+				return resp.Error("ERR syntax error")
+			}
+			o, err := strconv.ParseInt(args[i+1], 10, 64)
+			if err != nil || o < 0 {
+				return resp.Error("ERR value is not an integer or out of range")
+			}
+			l, err := strconv.ParseInt(args[i+2], 10, 64)
+			if err != nil || l < 0 {
+				return resp.Error("ERR value is not an integer or out of range")
+			}
+			offset, limit = o, l
+			i += 2
+		default:
+			return resp.Error("ERR syntax error")
+		}
+	}
+	members, err := r.store.ZRangeByScore(ctx, s.DB, args[1], min, max, offset, limit, rev)
 	if err != nil {
 		return mapErr(err)
 	}

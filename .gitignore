@@ -11,4 +11,6 @@ tmp/
 dist/
 bin/
 coverage.out
-to-do
+to-do/*
+!to-do/2/
+!to-do/2/*.md

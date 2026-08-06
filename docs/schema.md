@@ -7,6 +7,12 @@ There are two logical tables:
 - `redge_keys`: one row per Redis key.
 - `redge_zset_members`: one row per sorted set member.
 
+When the Document API is enabled and migrations are enabled, Redge also creates:
+
+- `redge_docs`: one row per JSON document.
+- `redge_doc_index_config`: explicit per-collection field/search index configuration.
+- `redge_doc_indexes`: equality index entries for configured top-level scalar fields.
+
 ## SQL Backends
 
 SQLite, libSQL/Turso, PostgreSQL, and MySQL use GORM migrations.
@@ -125,6 +131,45 @@ Current values for `redge_keys.type`:
 
 Wrong-type operations return Redis-style `WRONGTYPE` errors.
 
+## Document API Schema
+
+Document rows are separate from Redis keys.
+
+### `redge_docs`
+
+| Column | Purpose |
+| --- | --- |
+| `db` | Logical database number, currently `0` for the Document API. |
+| `collection` | Collection name. |
+| `id` | Document id. |
+| `value` | Canonical JSON document object. |
+| `search_text` | Denormalized text from configured search fields. |
+| `expires_at` | Optional expiration timestamp. |
+| `version` | Monotonic document version. |
+| `created_at` / `updated_at` | Document timestamps. |
+
+Primary key:
+
+```sql
+(db, collection, id)
+```
+
+### `redge_doc_index_config`
+
+Stores explicit collection indexes. Rows with `kind = 'field'` are equality indexes. Rows with `kind = 'search'` contribute to `search_text`.
+
+### `redge_doc_indexes`
+
+Stores one row per indexed scalar field value per document.
+
+Primary key:
+
+```sql
+(db, collection, field, value_hash, id)
+```
+
+This keeps Document API querying explicit. Redge does not automatically index every JSON field.
+
 ## Expiration Model
 
 Redge stores TTL metadata on `redge_keys.expires_at`.
@@ -147,6 +192,6 @@ This keeps sorted set members from becoming orphaned.
 
 ## D1 Batch Note
 
-D1 migrations use `BatchRaw` where safe.
+D1 migrations use explicit single-statement HTTP calls where required by the D1 HTTP API.
 
 Hot-path commands use single parameterized HTTP calls. Cloudflare D1's HTTP `/raw` endpoint rejects multiple statements with params in one request, so Redge avoids unsafe multi-statement parameter batching for writes like `ZADD` and `DEL`.

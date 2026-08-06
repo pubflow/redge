@@ -23,6 +23,7 @@ type Config struct {
 	LogFormat             string        `mapstructure:"REDGE_LOG_FORMAT" validate:"required,oneof=json console"`
 	ShutdownTimeout       time.Duration `mapstructure:"REDGE_SHUTDOWN_TIMEOUT"`
 	Password              string        `mapstructure:"REDGE_PASSWORD"`
+	APIToken              string        `mapstructure:"REDGE_API_TOKEN"`
 	RequireAuth           bool          `mapstructure:"REDGE_REQUIRE_AUTH"`
 	ProtectedMode         bool          `mapstructure:"REDGE_PROTECTED_MODE"`
 	AllowedIPs            string        `mapstructure:"REDGE_ALLOWED_IPS"`
@@ -61,6 +62,20 @@ type Config struct {
 	AdminAllowedIPs       string        `mapstructure:"REDGE_ADMIN_ALLOWED_IPS"`
 	AdminIPCheckEnabled   bool          `mapstructure:"REDGE_ADMIN_IP_CHECK_ENABLED"`
 	AdminReadOnly         bool          `mapstructure:"REDGE_ADMIN_READONLY"`
+	APIMaxBodyBytes       int64         `mapstructure:"REDGE_API_MAX_BODY_BYTES" validate:"min=1024"`
+	APIAllowedIPs         string        `mapstructure:"REDGE_API_ALLOWED_IPS"`
+	APIIPCheckEnabled     bool          `mapstructure:"REDGE_API_IP_CHECK_ENABLED"`
+	APICORSEnabled        bool          `mapstructure:"REDGE_API_CORS_ENABLED"`
+	APICORSOrigins        string        `mapstructure:"REDGE_API_CORS_ORIGINS"`
+	APIRateLimit          bool          `mapstructure:"REDGE_API_RATE_LIMIT_ENABLED"`
+	APIRateLimitRPS       int           `mapstructure:"REDGE_API_RATE_LIMIT_RPS" validate:"min=1"`
+	APIRateLimitBurst     int           `mapstructure:"REDGE_API_RATE_LIMIT_BURST" validate:"min=1"`
+	DocAPIEnabled         bool          `mapstructure:"REDGE_DOCAPI_ENABLED"`
+	WSEnabled             bool          `mapstructure:"REDGE_WS_ENABLED"`
+	WSMaxBytes            int64         `mapstructure:"REDGE_WS_MAX_MESSAGE_BYTES" validate:"min=1024"`
+	WSIdleTimeout         time.Duration `mapstructure:"REDGE_WS_IDLE_TIMEOUT"`
+	WSMaxSubs             int           `mapstructure:"REDGE_WS_MAX_SUBSCRIPTIONS" validate:"min=1"`
+	StoreAPIEnabled       bool          `mapstructure:"REDGE_STOREAPI_ENABLED"`
 }
 
 func Load() (*Config, error) {
@@ -96,6 +111,12 @@ func Load() (*Config, error) {
 	if cfg.IsProduction() && cfg.AdminEnabled && cfg.AdminToken == "" {
 		return nil, fmt.Errorf("REDGE_ADMIN_TOKEN is required in production when admin is enabled")
 	}
+	if (cfg.DocAPIEnabled || cfg.StoreAPIEnabled) && !cfg.HTTPEnabled {
+		return nil, fmt.Errorf("REDGE_HTTP_ENABLED=true is required when Document API or Store API is enabled")
+	}
+	if cfg.IsProduction() && (cfg.DocAPIEnabled || cfg.StoreAPIEnabled) && strings.TrimSpace(cfg.APIToken) == "" {
+		return nil, fmt.Errorf("REDGE_API_TOKEN is required in production when Document API or Store API is enabled")
+	}
 	if err := validator.New().Struct(&cfg); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
@@ -113,6 +134,7 @@ func setDefaults() {
 	viper.SetDefault("REDGE_LOG_FORMAT", "json")
 	viper.SetDefault("REDGE_SHUTDOWN_TIMEOUT", "10s")
 	viper.SetDefault("REDGE_PASSWORD", "")
+	viper.SetDefault("REDGE_API_TOKEN", "")
 	viper.SetDefault("REDGE_REQUIRE_AUTH", false)
 	viper.SetDefault("REDGE_PROTECTED_MODE", true)
 	viper.SetDefault("REDGE_ALLOWED_IPS", "")
@@ -151,6 +173,20 @@ func setDefaults() {
 	viper.SetDefault("REDGE_ADMIN_ALLOWED_IPS", "")
 	viper.SetDefault("REDGE_ADMIN_IP_CHECK_ENABLED", false)
 	viper.SetDefault("REDGE_ADMIN_READONLY", false)
+	viper.SetDefault("REDGE_API_MAX_BODY_BYTES", 1048576)
+	viper.SetDefault("REDGE_API_ALLOWED_IPS", "")
+	viper.SetDefault("REDGE_API_IP_CHECK_ENABLED", false)
+	viper.SetDefault("REDGE_API_CORS_ENABLED", false)
+	viper.SetDefault("REDGE_API_CORS_ORIGINS", "")
+	viper.SetDefault("REDGE_API_RATE_LIMIT_ENABLED", false)
+	viper.SetDefault("REDGE_API_RATE_LIMIT_RPS", 30)
+	viper.SetDefault("REDGE_API_RATE_LIMIT_BURST", 60)
+	viper.SetDefault("REDGE_DOCAPI_ENABLED", false)
+	viper.SetDefault("REDGE_WS_ENABLED", true)
+	viper.SetDefault("REDGE_WS_MAX_MESSAGE_BYTES", 65536)
+	viper.SetDefault("REDGE_WS_IDLE_TIMEOUT", "60s")
+	viper.SetDefault("REDGE_WS_MAX_SUBSCRIPTIONS", 32)
+	viper.SetDefault("REDGE_STOREAPI_ENABLED", false)
 }
 
 func (c *Config) IsDevelopment() bool { return c.Environment == "development" }
@@ -300,6 +336,18 @@ func (c *Config) D1Parts() (accountID, databaseID string, err error) {
 
 func (c *Config) GetAdminAllowedIPs() []string {
 	return splitList(c.AdminAllowedIPs)
+}
+
+func (c *Config) GetAPIToken() string {
+	return strings.TrimSpace(c.APIToken)
+}
+
+func (c *Config) GetAPIAllowedIPs() []string {
+	return splitList(c.APIAllowedIPs)
+}
+
+func (c *Config) GetAPICORSOrigins() []string {
+	return splitList(c.APICORSOrigins)
 }
 
 func (c *Config) GetAllowedIPs() []string {

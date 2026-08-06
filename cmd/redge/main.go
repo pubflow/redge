@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -19,11 +20,14 @@ import (
 	"github.com/pubflow/redge/internal/command"
 	"github.com/pubflow/redge/internal/config"
 	"github.com/pubflow/redge/internal/database"
+	"github.com/pubflow/redge/internal/docapi"
+	"github.com/pubflow/redge/internal/docstore"
 	"github.com/pubflow/redge/internal/server"
 	"github.com/pubflow/redge/internal/status"
 	"github.com/pubflow/redge/internal/store"
 	"github.com/pubflow/redge/internal/store/d1store"
 	"github.com/pubflow/redge/internal/store/sqlstore"
+	"github.com/pubflow/redge/internal/storeapi"
 	"go.uber.org/zap"
 )
 
@@ -116,23 +120,6 @@ func main() {
 		}
 	}()
 
-	var statusServer *status.Server
-	if cfg.HTTPEnabled {
-		statusServer = status.New(status.Options{
-			Addr:         cfg.HTTPAddr,
-			Store:        st,
-			DatabaseType: databaseType,
-			Logger:       logger,
-		})
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := statusServer.ListenAndServe(); err != nil && !errors.Is(err, status.ErrClosed) {
-				logger.Fatal("http status server stopped", zap.Error(err))
-			}
-		}()
-	}
-
 	var adminServer *admin.Server
 	if cfg.AdminEnabled {
 		adminServer = admin.New(admin.Options{
@@ -151,6 +138,81 @@ func main() {
 			defer wg.Done()
 			if err := adminServer.ListenAndServe(); err != nil && !errors.Is(err, admin.ErrClosed) {
 				logger.Fatal("admin server stopped", zap.Error(err))
+			}
+		}()
+	}
+
+	var docServer *docapi.Server
+	if cfg.DocAPIEnabled {
+		docStore, ok := st.(docstore.Store)
+		if !ok {
+			logger.Fatal("document api is not supported by this store")
+		}
+		if cfg.MigrationsAuto {
+			if err := docStore.MigrateDocs(context.Background()); err != nil {
+				logger.Fatal("document api migration failed", zap.Error(err))
+			}
+		}
+		docServer = docapi.New(docapi.Options{
+			Addr:               cfg.HTTPAddr,
+			Token:              cfg.GetAPIToken(),
+			MaxBodyBytes:       cfg.APIMaxBodyBytes,
+			WSEnabled:          cfg.WSEnabled,
+			AllowedIPs:         cfg.GetAPIAllowedIPs(),
+			IPCheck:            cfg.APIIPCheckEnabled,
+			CORSEnabled:        cfg.APICORSEnabled,
+			CORSOrigins:        cfg.GetAPICORSOrigins(),
+			RateLimitEnabled:   cfg.APIRateLimit,
+			RateLimitRPS:       cfg.APIRateLimitRPS,
+			RateLimitBurst:     cfg.APIRateLimitBurst,
+			WSMaxMessageBytes:  cfg.WSMaxBytes,
+			WSIdleTimeout:      cfg.WSIdleTimeout,
+			WSMaxSubscriptions: cfg.WSMaxSubs,
+			Store:              docStore,
+			Logger:             logger,
+		})
+	}
+
+	var storeServer *storeapi.Server
+	if cfg.StoreAPIEnabled {
+		storeServer = storeapi.New(storeapi.Options{
+			Addr:             cfg.HTTPAddr,
+			Token:            cfg.GetAPIToken(),
+			MaxBodyBytes:     cfg.APIMaxBodyBytes,
+			AllowedIPs:       cfg.GetAPIAllowedIPs(),
+			IPCheck:          cfg.APIIPCheckEnabled,
+			CORSEnabled:      cfg.APICORSEnabled,
+			CORSOrigins:      cfg.GetAPICORSOrigins(),
+			RateLimitEnabled: cfg.APIRateLimit,
+			RateLimitRPS:     cfg.APIRateLimitRPS,
+			RateLimitBurst:   cfg.APIRateLimitBurst,
+			Store:            st,
+			Cache:            l1,
+			Logger:           logger,
+		})
+	}
+
+	var statusServer *status.Server
+	if cfg.HTTPEnabled {
+		statusServer = status.New(status.Options{
+			Addr:         cfg.HTTPAddr,
+			Store:        st,
+			DatabaseType: databaseType,
+			Logger:       logger,
+			Mount: func(mux *http.ServeMux) {
+				if docServer != nil {
+					docServer.Mount(mux)
+				}
+				if storeServer != nil {
+					storeServer.Mount(mux)
+				}
+			},
+		})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := statusServer.ListenAndServe(); err != nil && !errors.Is(err, status.ErrClosed) {
+				logger.Fatal("http server stopped", zap.Error(err))
 			}
 		}()
 	}
@@ -179,7 +241,7 @@ func main() {
 		}()
 	}
 
-	logger.Info("redge started", zap.String("redis_addr", cfg.Addr), zap.String("http_addr", cfg.HTTPAddr), zap.String("admin_addr", cfg.AdminAddr), zap.String("database", databaseType))
+	logger.Info("redge started", zap.String("redis_addr", cfg.Addr), zap.String("http_addr", cfg.HTTPAddr), zap.String("admin_addr", cfg.AdminAddr), zap.Bool("docapi", cfg.DocAPIEnabled), zap.Bool("storeapi", cfg.StoreAPIEnabled), zap.String("database", databaseType))
 	<-ctx.Done()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)

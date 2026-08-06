@@ -26,7 +26,12 @@ Redis TCP can run as plaintext `redis://` or native TLS `rediss://` when `REDGE_
 | Command | Notes |
 | --- | --- |
 | `GET` | Uses the L1 cache for string keys. |
+| `MGET` | Batch string reads while preserving requested key order. |
 | `SET` | Supports `EX`, `PX`, `NX`, `XX`, `GET`, and `KEEPTTL`. |
+| `MSET` | Batch string writes. |
+| `SETNX` | Equivalent to `SET key value NX`, returns `1` when written and `0` when skipped. |
+| `GETSET` | Returns the previous string value and stores the new value. |
+| `GETDEL` | Returns the previous string value and deletes the key. |
 | `SETEX` | Equivalent to setting a string with seconds TTL. |
 | `DEL` | Deletes string and sorted-set keys. |
 | `EXISTS` | Counts existing non-expired keys. |
@@ -34,6 +39,7 @@ Redis TCP can run as plaintext `redis://` or native TLS `rediss://` when `REDGE_
 | `STRLEN` | Returns string byte length, `0` for missing keys, or `WRONGTYPE` for non-strings. |
 | `MEMORY USAGE` | Returns an approximate byte size for GUI compatibility. |
 | `EXPIRE` | Sets a seconds TTL. |
+| `PERSIST` | Removes an existing TTL. |
 | `TTL` | Redis-style seconds TTL response. |
 | `PTTL` | Redis-style milliseconds TTL response. |
 | `INCR` | Integer increment by `1`. |
@@ -50,6 +56,8 @@ Redis TCP can run as plaintext `redis://` or native TLS `rediss://` when `REDGE_
 | `ZREM` | Removes one or more members. |
 | `ZREMRANGEBYSCORE` | Supports finite scores, `-inf`, `+inf`, and exclusive bounds like `(10`. |
 | `ZRANGE` | Supports `start`, `stop`, negative indexes, and optional `WITHSCORES`. |
+| `ZRANGEBYSCORE` | Supports score bounds, optional `WITHSCORES`, and optional `LIMIT offset count`. |
+| `ZREVRANGEBYSCORE` | Descending score range variant with optional `WITHSCORES` and `LIMIT`. |
 | `ZSCORE` | Returns the member score or null. |
 | `ZCOUNT` | Supports finite scores, infinities, and exclusive bounds. |
 
@@ -90,6 +98,12 @@ Redge is durable-database backed. That is the point, but it means some Redis int
 | `MULTI/EXEC` | Provides simple queued execution, not full Redis transaction semantics. |
 | D1 backend | D1 HTTP calls are remote and usage-billed by rows read/written. High-write workloads should be measured. |
 | Cache | The L1 cache is process-local and short lived. It is not the durable source of truth. |
+
+## HTTP APIs Are Separate
+
+The JSON Document API is not part of Redis compatibility. It uses HTTP and optional WebSocket endpoints backed by separate document tables.
+
+The public Store API is also separate from RESP compatibility. It exposes app-friendly HTTP routes for string, TTL, counter, scan, and sorted-set use cases, but it is not Redis-over-HTTP. RESP clients continue to use the Redis-compatible TCP protocol.
 
 ## Not Supported Yet
 

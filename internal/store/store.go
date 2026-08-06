@@ -32,15 +32,24 @@ type SetOptions struct {
 	Get     bool
 }
 
+type KeyValue struct {
+	Key   string
+	Value []byte
+}
+
 type Store interface {
 	Migrate(ctx context.Context) error
 	Ping(ctx context.Context) error
 	Type(ctx context.Context, db int, key string) (string, error)
 	Get(ctx context.Context, db int, key string) (*Value, error)
+	MGet(ctx context.Context, db int, keys ...string) ([]*Value, error)
 	Set(ctx context.Context, db int, key string, value []byte, opts SetOptions) (*Value, bool, error)
+	MSet(ctx context.Context, db int, pairs []KeyValue, opts SetOptions) error
+	GetDel(ctx context.Context, db int, key string) (*Value, bool, error)
 	Delete(ctx context.Context, db int, keys ...string) (int64, error)
 	Exists(ctx context.Context, db int, keys ...string) (int64, error)
 	Expire(ctx context.Context, db int, key string, ttl time.Duration) (bool, error)
+	Persist(ctx context.Context, db int, key string) (bool, error)
 	TTL(ctx context.Context, db int, key string) (time.Duration, bool, bool, error)
 	IncrBy(ctx context.Context, db int, key string, delta int64) (int64, error)
 	ZAdd(ctx context.Context, db int, key string, score float64, member []byte) (int64, error)
@@ -48,6 +57,7 @@ type Store interface {
 	ZRem(ctx context.Context, db int, key string, members ...[]byte) (int64, error)
 	ZRemRangeByScore(ctx context.Context, db int, key string, min, max ScoreBound) (int64, error)
 	ZRange(ctx context.Context, db int, key string, start, stop int64) ([]ZMember, error)
+	ZRangeByScore(ctx context.Context, db int, key string, min, max ScoreBound, offset, limit int64, rev bool) ([]ZMember, error)
 	ZScore(ctx context.Context, db int, key string, member []byte) (float64, bool, error)
 	ZCount(ctx context.Context, db int, key string, min, max ScoreBound) (int64, error)
 	Scan(ctx context.Context, db int, cursor string, pattern string, count int) (ScanResult, error)

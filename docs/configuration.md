@@ -7,15 +7,39 @@ Redge loads configuration from `.env` and environment variables. Environment var
 | Variable | Default | Description |
 | --- | --- | --- |
 | `REDGE_ADDR` | `0.0.0.0:6379` | Redis/Valkey protocol TCP listener address. |
-| `REDGE_HTTP_ENABLED` | `true` | Enables the public HTTP status server for platform health checks. |
-| `REDGE_HTTP_ADDR` | `0.0.0.0:8080` | Public HTTP status listener address. Docker/Nixpacks map platform `PORT` here. |
+| `REDGE_HTTP_ENABLED` | `true` | Enables the public HTTP app server. Required when Document API or Store API is enabled. |
+| `REDGE_HTTP_ADDR` | `0.0.0.0:8080` | Public HTTP app listener address. Docker/Nixpacks map platform `PORT` here. |
 | `REDGE_ENV` | `development` | Runtime environment: `development`, `test`, or `production`. |
 | `REDGE_LOG_LEVEL` | `info` | Intended log level: `debug`, `info`, `warn`, or `error`. |
 | `REDGE_LOG_FORMAT` | `json` | Log format: `json` or `console`. Development mode uses console logging. |
+| `REDGE_API_TOKEN` | empty | Single app token for Document API, Store API, and WebSocket routes. Required in production when either app API is enabled. |
 | `REDGE_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown timeout. |
 | `REDGE_MAX_REQUEST_BYTES` | `1048576` | Maximum RESP request size. Must be at least `1024`. |
 | `REDGE_READ_TIMEOUT` | `30s` | TCP read timeout. |
 | `REDGE_WRITE_TIMEOUT` | `30s` | TCP write timeout. |
+
+## App HTTP API
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `REDGE_API_MAX_BODY_BYTES` | `1048576` | Maximum JSON request body size for Document API and Store API. |
+| `REDGE_API_ALLOWED_IPS` | empty | Comma, semicolon, or newline separated IP/CIDR allowlist for app API clients. |
+| `REDGE_API_IP_CHECK_ENABLED` | `false` | Enables app API IP allowlist checks. |
+| `REDGE_API_CORS_ENABLED` | `false` | Enables explicit browser CORS responses for app API routes. |
+| `REDGE_API_CORS_ORIGINS` | empty | Comma-separated allowed browser origins such as `https://app.example.com`. Use `*` only for trusted non-browser/internal scenarios. |
+| `REDGE_API_RATE_LIMIT_ENABLED` | `false` | Enables a simple in-process per-token/per-IP token bucket rate limit. |
+| `REDGE_API_RATE_LIMIT_RPS` | `30` | Tokens added per second when rate limiting is enabled. |
+| `REDGE_API_RATE_LIMIT_BURST` | `60` | Maximum burst tokens when rate limiting is enabled. |
+| `REDGE_DOCAPI_ENABLED` | `false` | Enables JSON document routes and optional WebSocket route on `REDGE_HTTP_ADDR`. |
+| `REDGE_STOREAPI_ENABLED` | `false` | Enables the public app-facing HTTP Store API. |
+| `REDGE_WS_ENABLED` | `true` | Enables `GET /v1/ws` WebSocket upgrades when Document API is enabled. |
+| `REDGE_WS_MAX_MESSAGE_BYTES` | `65536` | Maximum WebSocket message size. |
+| `REDGE_WS_IDLE_TIMEOUT` | `60s` | Maximum idle time waiting for the next WebSocket message. |
+| `REDGE_WS_MAX_SUBSCRIPTIONS` | `32` | Maximum local realtime subscriptions per WebSocket connection. |
+
+Document API, Store API, and WebSocket routes all run on `REDGE_HTTP_ADDR` and use `Authorization: Bearer <REDGE_API_TOKEN>`. WebSocket clients that cannot set headers may pass `?token=`.
+
+Platform HTTPS protects the app HTTP listener when routed through the platform proxy; Redis TCP still needs native Redis TLS for public `rediss://` clients. Admin auth remains separate and only uses `REDGE_ADMIN_TOKEN`.
 
 ## Redis Authentication
 
@@ -149,6 +173,12 @@ Reads also lazily delete expired keys when they are encountered.
 REDGE_ADDR=0.0.0.0:6379
 REDGE_HTTP_ENABLED=true
 REDGE_HTTP_ADDR=0.0.0.0:8080
+REDGE_DOCAPI_ENABLED=false
+REDGE_API_TOKEN=
+REDGE_API_CORS_ENABLED=false
+REDGE_API_RATE_LIMIT_ENABLED=false
+REDGE_WS_ENABLED=true
+REDGE_STOREAPI_ENABLED=false
 REDGE_ENV=production
 REDGE_LOG_FORMAT=json
 

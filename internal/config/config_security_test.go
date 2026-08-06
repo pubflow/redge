@@ -55,6 +55,60 @@ func TestAllowedIPsParsing(t *testing.T) {
 	}
 }
 
+func TestAPITokenIsSingleAppToken(t *testing.T) {
+	cfg := Config{Password: "redis-password", APIToken: "app-token"}
+	if got := cfg.GetAPIToken(); got != "app-token" {
+		t.Fatalf("expected API token, got %q", got)
+	}
+}
+
+func TestProductionAppAPIsRequireAPIToken(t *testing.T) {
+	t.Setenv("REDGE_ENV", "production")
+	t.Setenv("REDGE_ADDR", "127.0.0.1:6379")
+	t.Setenv("REDGE_ADMIN_ENABLED", "false")
+	t.Setenv("REDGE_DOCAPI_ENABLED", "true")
+	t.Setenv("REDGE_API_TOKEN", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected production Document API without REDGE_API_TOKEN to fail")
+	}
+}
+
+func TestProductionAppAPIsDoNotUseRedisPassword(t *testing.T) {
+	t.Setenv("REDGE_ENV", "production")
+	t.Setenv("REDGE_ADDR", "127.0.0.1:6379")
+	t.Setenv("REDGE_ADMIN_ENABLED", "false")
+	t.Setenv("REDGE_STOREAPI_ENABLED", "true")
+	t.Setenv("REDGE_PASSWORD", "redis-password")
+	t.Setenv("REDGE_API_TOKEN", "")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected REDGE_PASSWORD not to satisfy HTTP app API auth")
+	}
+}
+
+func TestProductionAppAPIsLoadWithAPIToken(t *testing.T) {
+	t.Setenv("REDGE_ENV", "production")
+	t.Setenv("REDGE_ADDR", "127.0.0.1:6379")
+	t.Setenv("REDGE_ADMIN_ENABLED", "false")
+	t.Setenv("REDGE_DOCAPI_ENABLED", "true")
+	t.Setenv("REDGE_STOREAPI_ENABLED", "true")
+	t.Setenv("REDGE_API_TOKEN", "app-token")
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("expected app APIs with REDGE_API_TOKEN to load: %v", err)
+	}
+}
+
+func TestAppAPIsRequireHTTPServer(t *testing.T) {
+	t.Setenv("REDGE_HTTP_ENABLED", "false")
+	t.Setenv("REDGE_STOREAPI_ENABLED", "true")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected Store API without HTTP server to fail")
+	}
+}
+
 func TestTLSEnabledRequiresCertAndKey(t *testing.T) {
 	t.Setenv("REDGE_TLS_ENABLED", "true")
 

@@ -3,6 +3,7 @@ module github.com/pubflow/redge
 go 1.25.0
 
 require (
+	github.com/coder/websocket v1.8.12
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-playground/validator/v10 v10.16.0
@@ -18,7 +19,6 @@ require (
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
-	github.com/coder/websocket v1.8.12 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect

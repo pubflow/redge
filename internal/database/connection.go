@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 
 	glebarez "github.com/glebarez/sqlite"
@@ -103,7 +104,47 @@ func detectType(dsn string) string {
 }
 
 func trimMySQLScheme(dsn string) string {
-	return strings.TrimPrefix(dsn, "mysql://")
+	if !strings.HasPrefix(dsn, "mysql://") {
+		return dsn
+	}
+	u, err := url.Parse(dsn)
+	if err != nil || u.Host == "" {
+		return strings.TrimPrefix(dsn, "mysql://")
+	}
+	user := u.User.Username()
+	password, _ := u.User.Password()
+	auth := user
+	if password != "" {
+		auth += ":" + password
+	}
+	dbName := strings.TrimPrefix(u.Path, "/")
+	query := u.Query()
+	sslMode := strings.ToLower(firstURLQueryValue(query, "ssl-mode", "sslmode"))
+	query.Del("ssl-mode")
+	query.Del("sslmode")
+	if query.Get("parseTime") == "" {
+		query.Set("parseTime", "true")
+	}
+	if query.Get("tls") == "" {
+		switch sslMode {
+		case "required", "require":
+			query.Set("tls", "skip-verify")
+		case "verify-ca", "verify-full", "verify_identity", "verify-identity":
+			query.Set("tls", "true")
+		case "disabled", "disable":
+			query.Set("tls", "false")
+		}
+	}
+	return fmt.Sprintf("%s@tcp(%s)/%s?%s", auth, u.Host, dbName, query.Encode())
+}
+
+func firstURLQueryValue(values url.Values, keys ...string) string {
+	for _, key := range keys {
+		if v := strings.TrimSpace(values.Get(key)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func newLibSQLDialector(dbURL, authToken string) (gorm.Dialector, io.Closer, error) {

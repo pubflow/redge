@@ -11,6 +11,8 @@ This first implementation includes:
 - Multi-database support through `DATABASE_URL`: SQLite, libSQL/Turso, PostgreSQL, MySQL, and Cloudflare D1.
 - L1 in-memory cache powered by Ristretto/TinyLFU with TTL, max keys, max bytes, and admin metrics.
 - Admin HTTP server with health, cache metrics, cleanup, paginated key inspection, single-key deletion, and sorted-set inspection.
+- Optional JSON Document API with explicit field indexes and local WebSocket realtime subscriptions.
+- Optional public Store HTTP API with strings, TTL, counters, scans, and sorted sets for app clients that need HTTPS instead of Redis TCP.
 
 ## Run Locally
 
@@ -76,6 +78,8 @@ REDGE_REQUIRE_AUTH=true
 REDGE_PASSWORD=<strong-random-password>
 DATABASE_URL=sqlite:///data/redge.db
 REDGE_ADMIN_ENABLED=false
+REDGE_DOCAPI_ENABLED=false
+REDGE_STOREAPI_ENABLED=false
 REDGE_MAX_CONNECTIONS=1000
 ```
 
@@ -182,11 +186,11 @@ Supported connection and server commands:
 
 Supported string and TTL commands:
 
-- `GET`, `SET`, `SETEX`, `DEL`, `EXISTS`, `TYPE`, `STRLEN`, `MEMORY USAGE`, `EXPIRE`, `TTL`, `PTTL`, `INCR`, `DECR`, `INCRBY`, `DECRBY`.
+- `GET`, `MGET`, `SET`, `MSET`, `SETNX`, `GETSET`, `GETDEL`, `SETEX`, `DEL`, `EXISTS`, `TYPE`, `STRLEN`, `MEMORY USAGE`, `EXPIRE`, `PERSIST`, `TTL`, `PTTL`, `INCR`, `DECR`, `INCRBY`, `DECRBY`.
 
 Supported sorted set commands:
 
-- `ZADD`, `ZCARD`, `ZREM`, `ZREMRANGEBYSCORE`, `ZRANGE`, `ZSCORE`, `ZCOUNT`.
+- `ZADD`, `ZCARD`, `ZREM`, `ZREMRANGEBYSCORE`, `ZRANGE`, `ZRANGEBYSCORE`, `ZREVRANGEBYSCORE`, `ZSCORE`, `ZCOUNT`.
 
 Supported iteration and batching behavior:
 
@@ -203,10 +207,68 @@ Supported admin inspection routes:
 
 Cloudflare D1 notes:
 
-- D1 schema migrations use `d1http.BatchRaw` where it is safe.
+- D1 schema migrations use explicit single-statement HTTP calls where required by the D1 HTTP API.
 - Parameterized hot-path commands use single prepared HTTP calls because the D1 HTTP API rejects multiple statements with params in one `/raw` request.
 - ioredis pipeline correctness is supported at the Redis protocol layer. True D1 write coalescing for arbitrary client pipelines needs a dedicated server-side coalescer because Redis pipelining has no explicit begin/end marker on the wire.
 
 Not supported yet:
 
 - Redis Cluster, Lua scripting, Pub/Sub, Streams, hashes, sets, lists, blocking list commands, `KEYS`, `WATCH`/`UNWATCH`, geospatial commands, and probabilistic data structures.
+
+## Document API
+
+The Document API is disabled by default and runs on a separate HTTP listener:
+
+```env
+REDGE_DOCAPI_ENABLED=true
+REDGE_API_TOKEN=<strong-random-app-token>
+REDGE_WS_ENABLED=true
+```
+
+Routes:
+
+- `POST /v1/collections/{collection}`
+- `GET /v1/collections/{collection}/{id}`
+- `PUT /v1/collections/{collection}/{id}`
+- `PATCH /v1/collections/{collection}/{id}`
+- `DELETE /v1/collections/{collection}/{id}`
+- `GET /v1/collections/{collection}?where=field:eq:value&search=text`
+- `PUT /v1/collections/{collection}/indexes`
+- `GET /v1/ws`
+
+Field queries require explicit indexes. Configure them with:
+
+```json
+{"fields":["category"],"searchFields":["name","description"]}
+```
+
+## Store API
+
+The Store API is disabled by default and runs on the same public HTTP app listener as status and Document API:
+
+```env
+REDGE_STOREAPI_ENABLED=true
+REDGE_API_TOKEN=<strong-random-app-token>
+```
+
+Routes include:
+
+- `GET`, `PUT`, and `DELETE /v1/kv/{key}`
+- `POST /v1/kv/batch/get`
+- `POST /v1/kv/batch/set`
+- `POST /v1/kv/{key}/getdel`
+- `POST /v1/kv/{key}/incr`
+- `POST /v1/kv/{key}/expire`
+- `POST /v1/kv/{key}/persist`
+- `GET /v1/kv/{key}/ttl`
+- `GET /v1/kv?match=prefix:*&cursor=0&limit=100`
+- `POST /v1/zsets/{key}/members`
+- `GET /v1/zsets/{key}/members`
+- `GET /v1/zsets/{key}/byscore`
+- `DELETE /v1/zsets/{key}/members/{member}`
+- `DELETE /v1/zsets/{key}/byscore`
+- `GET /v1/zsets/{key}/score/{member}`
+- `GET /v1/zsets/{key}/count`
+- `GET /v1/zsets/{key}/card`
+
+Document API and Store API use `REDGE_API_TOKEN`. Admin auth remains separate through `REDGE_ADMIN_TOKEN`, and Redis/RESP auth uses `REDGE_PASSWORD`.
